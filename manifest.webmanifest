@@ -1,0 +1,10 @@
+{
+  "name": "Assistente Zyn",
+  "short_name": "Zyn",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f5fc",
+  "theme_color": "#6d4aff",
+  "description": "Assistente pessoal local-first para lembretes, finanças, GYM e hábitos.",
+  "icons": []
+}
