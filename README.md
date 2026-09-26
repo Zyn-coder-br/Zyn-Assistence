@@ -1,4 +1,4 @@
-# Assistente Zyn — V1.3.0
+# Assistente Zyn — V1.4.0
 
 ## Novidades
 - Módulo de Metas funcional.
@@ -10,7 +10,7 @@
 - Criação, edição e exclusão de metas.
 - Lembretes com cadastro, edição, exclusão e conclusão.
 - Dados armazenados localmente no IndexedDB.
-- Service Worker atualizado para V1.3.0.
+- Service Worker atualizado para V1.4.0.
 
 ## Publicação no GitHub Pages
 1. Extraia o ZIP.
@@ -28,3 +28,7 @@
 
 ## GYM / Minha Rotina
 Perfil, divisão tradicional, semana editável, treino do dia, carga/repetições, sessões e caminhada/corrida.
+
+
+## Alimentação
+Perfil alimentar, 3–4 refeições, planejamento semanal, sugestões econômicas/práticas e lista de compras local.
