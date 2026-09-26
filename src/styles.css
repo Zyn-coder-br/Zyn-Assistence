@@ -2,3 +2,5 @@
 
 .gym-hero{background:linear-gradient(135deg,var(--surface),var(--surface2))}.gym-hero h2{font-size:25px}.gym-hero .eyebrow{color:var(--primary)}
 .food-hero{background:linear-gradient(135deg,var(--surface),var(--surface2))}.food-hero h2{font-size:26px;margin:5px 0}.food-hero .eyebrow{color:var(--primary)}
+
+.install-btn{border-color:var(--primary);color:var(--primary);font-weight:700}.install-btn:not([hidden]){display:inline-flex;align-items:center;justify-content:center}

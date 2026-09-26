@@ -1,4 +1,4 @@
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.5.3";
 const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 5;
 let db;
@@ -10,6 +10,7 @@ let earnings = [];
 let gymProfile = null, gymPlans = [], gymSessions = [];
 let foodProfile = null, mealPlans = [], shoppingItems = [];
 let financeProfile = null, financeAccounts = [], financeTransactions = [], financeBills = [], financeGoals = [];
+let deferredInstallPrompt = null;
 
 document.body.className = theme;
 const app = document.querySelector("#app");
@@ -147,7 +148,7 @@ function shoppingForm(){
 }
 function layout(){
  return `<div class="shell">
-  <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
+  <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇️</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
   <main id="content"></main>
  </div>
  <nav class="nav"><div class="nav-inner">
@@ -297,6 +298,14 @@ function earningForm(goalId){
 
 async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals")}
 function bind(){
+ document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
+   if(!deferredInstallPrompt) return;
+   deferredInstallPrompt.prompt();
+   const result=await deferredInstallPrompt.userChoice;
+   if(result?.outcome==="accepted") toast("Zyn instalado no dispositivo");
+   deferredInstallPrompt=null;
+   const b=document.querySelector("#installBtn"); if(b) b.hidden=true;
+ });
  document.querySelector("#themeBtn").onclick=toggleTheme;
  document.querySelector("#updateBtn").onclick=()=>toast("Assistente Zyn v"+APP_VERSION);
  document.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>setView(btn.dataset.view));
@@ -338,4 +347,20 @@ function bind(){
  document.querySelectorAll("[data-reminder-done]").forEach(b=>b.onclick=async()=>{const r=reminders.find(r=>r.id===Number(b.dataset.reminderDone));if(r){r.done=!r.done;await put("reminders",r);await loadData();render()}});
 }
 function render(){app.innerHTML=layout();bind()}
-(async()=>{await openDB();await loadData();if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});render()})();
+window.addEventListener("beforeinstallprompt", e=>{
+ e.preventDefault();
+ deferredInstallPrompt=e;
+ const b=document.querySelector("#installBtn"); if(b) b.hidden=false;
+});
+window.addEventListener("appinstalled", ()=>{
+ deferredInstallPrompt=null;
+ const b=document.querySelector("#installBtn"); if(b) b.hidden=true;
+ toast("Assistente Zyn instalado");
+});
+(async()=>{
+ await openDB();
+ await loadData();
+ if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+ render();
+ if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
+})();
