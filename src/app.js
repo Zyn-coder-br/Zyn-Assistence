@@ -1,6 +1,16 @@
-const APP_VERSION = "1.5.5";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const APP_VERSION = "1.6.0";
+const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiUHgJ1ksuby0aQ_XGSRI7vo";
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+let authSession = null;
+let syncBusy = false;
+let syncTimer = null;
+let cloudStatus = "offline";
+let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 let db;
 let currentView = "home";
 let theme = localStorage.getItem("zyn-theme") || "light";
@@ -20,7 +30,7 @@ function openDB(){
     const request=indexedDB.open(DB_NAME,DB_VERSION);
     request.onupgradeneeded=()=>{
       const database=request.result;
-      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals"].forEach(store=>{
+      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","syncQueue","syncMeta"].forEach(store=>{
         if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
       });
     };
@@ -30,8 +40,21 @@ function openDB(){
 }
 function store(name,mode="readonly"){return db.transaction(name,mode).objectStore(name)}
 function all(name){return new Promise((resolve,reject)=>{const r=store(name).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
-function put(name,data){return new Promise((resolve,reject)=>{const r=store(name,"readwrite").put(data);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-function remove(name,id){return new Promise((resolve,reject)=>{const r=store(name,"readwrite").delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)})}
+function put(name,data,options={}){return new Promise((resolve,reject)=>{
+  const payload={...(data||{})};
+  if(options.touch!==false && name!=="syncQueue" && name!=="syncMeta") payload.updatedAt=new Date().toISOString();
+  const r=store(name,"readwrite").put(payload);
+  r.onsuccess=()=>{if(options.touch!==false && typeof scheduleSync==="function")scheduleSync();resolve(r.result)};r.onerror=()=>reject(r.error)
+})}
+function remove(name,id){return new Promise(async(resolve,reject)=>{
+  const stamp=new Date().toISOString();
+  const r=store(name,"readwrite").delete(id);
+  r.onsuccess=async()=>{
+    try{ if(name!=="syncQueue" && name!=="syncMeta") await put("syncQueue",{storeName:name,recordId:String(id),updatedAt:stamp,deleted:true},{touch:false}); if(typeof scheduleSync==="function") scheduleSync(); resolve(); }
+    catch(e){reject(e)}
+  };
+  r.onerror=()=>reject(r.error)
+})}
 function money(value){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(value)||0)}
 function esc(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function todayISO(){return new Date().toISOString().slice(0,10)}
@@ -148,7 +171,7 @@ function shoppingForm(){
 }
 function layout(){
  return `<div class="shell">
-  <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇️</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
+  <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="cloud-status offline" id="cloudStatus" title="Status da nuvem"><span></span>Entrar para sincronizar</button><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇️</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
   <main id="content"></main>
  </div>
  <nav class="nav"><div class="nav-inner">
@@ -296,6 +319,59 @@ function earningForm(goalId){
  el.querySelector("#earningForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("earnings",{amount:Number(f.get("amount")),date:f.get("date"),source:f.get("source"),notes:f.get("notes"),goalId:goal?.id||null,createdAt:new Date().toISOString()});closeModal(el);await loadData();render();toast("Ganho registrado")};
 }
 
+function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
+function currentUser(){return authSession?.user||null;}
+async function refreshAuth(){const {data,error}=await supabase.auth.getSession();if(error) throw error;authSession=data.session||null;return authSession;}
+async function signIn(email,password){const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error) throw error;authSession=data.session;await syncAll("login");render();toast("☁️ Conta conectada e dados sincronizados");}
+async function signUp(email,password){const {data,error}=await supabase.auth.signUp({email,password});if(error) throw error;authSession=data.session||null;if(data.session){await syncAll("signup");render();toast("☁️ Conta criada e sincronizada");}else{toast("Conta criada. Confira seu e-mail para confirmar o cadastro.");}}
+async function signOut(){await supabase.auth.signOut();authSession=null;setCloudStatus("offline","Sessão encerrada — dados locais continuam disponíveis");render();toast("Você saiu da conta. Seus dados locais foram preservados.");}
+function authForm(){
+ const user=currentUser();
+ const el=modal(`<div class="row"><h2>☁️ Zyn Cloud</h2><button class="btn" id="close">×</button></div>
+ ${user?`<div class="stack"><section class="card full"><div class="eyebrow">CONTA CONECTADA</div><h3>${esc(user.email||"Usuário")}</h3><p class="muted">Seus dados locais e a nuvem usam a mesma conta. O sincronismo continua funcionando depois de voltar ao online.</p></section><div class="actions"><button class="btn primary" id="syncNow">↻ Sincronizar agora</button><button class="btn danger" id="logout">Sair da conta</button></div></div>`:
+ `<form id="authForm" class="stack"><div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="email" placeholder="seu@email.com"></div><div class="field"><label>Senha</label><input name="password" type="password" minlength="6" required autocomplete="current-password" placeholder="Mínimo de 6 caracteres"></div><div class="actions"><button class="btn primary" name="action" value="login">Entrar</button><button class="btn" name="action" value="signup">Criar conta</button></div><p class="muted">A conta serve apenas para identificar seus dados no Zyn Cloud. A chave usada no aplicativo é uma chave pública do Supabase; nenhuma service_role fica no navegador.</p></form>`}`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+ el.querySelector("#syncNow")?.addEventListener("click",async()=>{await syncAll("manual");closeModal(el);render();toast("☁️ Sincronização concluída")});
+ el.querySelector("#logout")?.addEventListener("click",async()=>{closeModal(el);await signOut()});
+ el.querySelector("#authForm")?.addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);const email=String(f.get("email")||"").trim();const password=String(f.get("password")||"");const action=e.submitter?.value||"login";try{if(action==="signup")await signUp(email,password);else await signIn(email,password);closeModal(el);render();}catch(err){toast("❌ "+(err?.message||"Não foi possível autenticar"));}});
+}
+async function readLocalRecords(){
+ const stores=["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals"];
+ const out=[];for(const name of stores){const rows=await all(name);for(const row of rows){if(row?.id!==undefined&&row?.id!==null){const stamp=row.updatedAt||new Date().toISOString();out.push({storeName:name,recordId:String(row.id),payload:row.updatedAt?row:{...row,updatedAt:stamp},updatedAt:stamp});}}}return out;
+}
+async function applyCloudRecord(row){
+ if(row.deleted_at){const local=(await all(row.store_name)).find(x=>String(x.id)===String(row.record_id));if(local){await removeLocalOnly(row.store_name,local.id);}return;}
+ const payload=row.payload;if(!payload||payload.id===undefined)return;await put(row.store_name,payload,{touch:false});
+}
+function removeLocalOnly(name,id){return new Promise((resolve,reject)=>{const r=store(name,"readwrite").delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)})}
+async function syncAll(reason="auto"){
+ if(syncBusy)return false;
+ if(!navigator.onLine){setCloudStatus("offline","Sem internet — alterações ficam no aparelho");return false;}
+ if(!currentUser()){setCloudStatus("offline","Entre na conta para sincronizar");return false;}
+ syncBusy=true;setCloudStatus("syncing","Sincronizando dados…");
+ try{
+   const user=currentUser();
+   const {data:cloudRows,error:readError}=await supabase.from("zyn_records").select("store_name,record_id,payload,updated_at,deleted_at").eq("user_id",user.id);
+   if(readError)throw readError;
+   const cloudMap=new Map((cloudRows||[]).map(r=>[`${r.store_name}::${r.record_id}`,r]));
+   const local=await readLocalRecords();
+   const queue=await all("syncQueue");
+   const localMap=new Map(local.map(r=>[`${r.storeName}::${r.recordId}`,r]));
+   const writes=[];const pendingDeletes=[];const appliedCloud=[];const queueKeys=new Set(queue.map(q=>`${q.storeName}::${q.recordId}`));
+   for(const q of queue){const key=`${q.storeName}::${q.recordId}`;const c=cloudMap.get(key);const qTime=new Date(q.updatedAt||0).getTime();const cTime=new Date(c?.updated_at||0).getTime();if(!c||qTime>=cTime){writes.push({user_id:user.id,store_name:q.storeName,record_id:q.recordId,payload:null,updated_at:q.updatedAt,deleted_at:q.updatedAt});}else{if(c) await applyCloudRecord(c); pendingDeletes.push(q.id);}}
+   for(const l of local){const key=`${l.storeName}::${l.recordId}`;const c=cloudMap.get(key);if(c?.deleted_at){const cTime=new Date(c.updated_at||c.deleted_at||0).getTime();const lTime=new Date(l.updatedAt||0).getTime();if(lTime>cTime)writes.push({user_id:user.id,store_name:l.storeName,record_id:l.recordId,payload:l.payload,updated_at:l.updatedAt,deleted_at:null});else await removeLocalOnly(l.storeName,l.payload.id);continue;}const cTime=new Date(c?.updated_at||0).getTime();const lTime=new Date(l.updatedAt||0).getTime();if(!c||lTime>cTime)writes.push({user_id:user.id,store_name:l.storeName,record_id:l.recordId,payload:l.payload,updated_at:l.updatedAt,deleted_at:null});}
+   for(const c of cloudRows||[]){const key=`${c.store_name}::${c.record_id}`;if(queueKeys.has(key))continue;if(localMap.has(key))continue;if(c.deleted_at)continue;await applyCloudRecord(c);appliedCloud.push(key);}
+   if(writes.length){const {error}=await supabase.from("zyn_records").upsert(writes,{onConflict:"user_id,store_name,record_id"});if(error)throw error;}
+   for(const c of cloudRows||[]){const key=`${c.store_name}::${c.record_id}`;if(queueKeys.has(key))continue;const l=localMap.get(key);if(!l||c.deleted_at)continue;const cTime=new Date(c.updated_at||0).getTime();const lTime=new Date(l.updatedAt||0).getTime();if(cTime>lTime)await applyCloudRecord(c);}
+   for(const q of queue)await removeLocalOnly("syncQueue",q.id);
+   for(const qid of pendingDeletes)await removeLocalOnly("syncQueue",qid);
+   await loadData();setCloudStatus("synced",`Sincronizado agora • ${new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`);return true;
+ }catch(error){console.warn("[Zyn Cloud]",error);setCloudStatus("error",`Falha na sincronização: ${error?.message||error}`);return false;}
+ finally{syncBusy=false;}
+}
+function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll("auto"),1200);}
+function bindCloudEvents(){supabase.auth.onAuthStateChange((event,session)=>{authSession=session||null;if(session){scheduleSync();}else{setCloudStatus("offline","Entre na conta para sincronizar");}render();});window.addEventListener("online",()=>syncAll("online"));window.addEventListener("offline",()=>setCloudStatus("offline","Sem internet — alterações ficam no aparelho"));}
+
 async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals")}
 function bind(){
  document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
@@ -307,6 +383,8 @@ function bind(){
    const b=document.querySelector("#installBtn"); if(b) b.hidden=true;
  });
  document.querySelector("#themeBtn").onclick=toggleTheme;
+ document.querySelector("#cloudStatus")?.addEventListener("click",authForm);
+ const cloud=document.querySelector("#cloudStatus"); if(cloud){cloud.className=`cloud-status ${cloudStatus}`;cloud.title=cloudMessage;cloud.innerHTML=`<span></span>${esc(cloudStatus==="synced"?cloudMessage:(currentUser()?"Conta conectada — toque para sincronizar":"Entrar para sincronizar"))}`;}
  document.querySelector("#updateBtn").onclick=()=>toast("Assistente Zyn v"+APP_VERSION);
  document.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>setView(btn.dataset.view));
  const content=document.querySelector("#content");
@@ -360,6 +438,10 @@ window.addEventListener("appinstalled", ()=>{
 (async()=>{
  await openDB();
  await loadData();
+ try{await refreshAuth();}catch(error){console.warn("[Zyn Cloud] Sessão não pôde ser recuperada:",error);}
+ bindCloudEvents();
+ if(authSession){setCloudStatus("syncing","Conectado — sincronizando…");syncAll("startup");}
+ else setCloudStatus("offline",navigator.onLine?"Entre na conta para sincronizar":"Sem internet — dados locais disponíveis");
  if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  render();
  if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
