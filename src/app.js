@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.6.2";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiUHgJ1ksuby0aQ_XGSRI7vo";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.6.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.6.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
