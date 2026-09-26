@@ -1,4 +1,4 @@
-# Zyn Assistente — V1.6.0
+# Zyn Assistente — V1.6.2
 
 ## Zyn Cloud + Login + sincronização
 
@@ -40,7 +40,9 @@ A configuração de confirmação de e-mail do Supabase pode exigir que você co
 - Instalação pelo navegador
 
 
-## V1.6.1 — Correção Supabase Cloud
+## V1.6.2 — Correção definitiva da chave Supabase + pacote limpo
 - SDK Supabase JS fixado em 2.117.2.
-- Mantida a Publishable Key no navegador.
-- Corrigida a camada de conexão para evitar incompatibilidade com versões antigas do SDK/CDN.
+- Corrigida a Publishable Key do projeto Zyn Assistente.
+- Cache do Service Worker atualizado para V1.6.2.
+- Pacote interno reconstruído a partir do código real do GitHub.
+- Pasta interna do pacote padronizada para V1.6.2.
