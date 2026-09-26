@@ -39,3 +39,50 @@
 .assistant-hero{display:flex;align-items:center;gap:20px;background:radial-gradient(circle at 20% 10%,color-mix(in srgb,var(--primary) 18%,transparent),transparent 42%),linear-gradient(135deg,var(--surface2),var(--surface));min-height:190px}.assistant-orb{width:72px;height:72px;border-radius:22px;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--primary2));color:white;box-shadow:0 12px 35px color-mix(in srgb,var(--primary) 30%,transparent);flex:0 0 72px}.assistant-orb .ui-icon{width:34px;height:34px}.assistant-hero h2{margin:5px 0}.assistant-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.assistant-actions .home-panel-card{min-height:110px}
 .more-item .ui-icon{width:25px;height:25px;color:var(--primary);margin-bottom:2px}
 @media(max-width:700px){.home-hero{align-items:flex-start;flex-direction:column;padding:18px}.home-hero h1{font-size:26px}.home-date{text-align:left}.home-panels{grid-template-columns:1fr}.home-summary-grid{grid-template-columns:1fr}.wellness-grid{grid-template-columns:1fr}.wellness-hero{align-items:flex-start;flex-direction:column}.assistant-hero{align-items:flex-start;flex-direction:column}.assistant-actions{grid-template-columns:1fr}.home-panel-card{padding:16px}.panel-stat i{max-width:100%;margin-left:0}}
+
+
+/* V1.7.5 — Zyn Assistente visual system: unified professional panels */
+:root{--zyn-nav-height:76px;--zyn-dock-gap:10px;--zyn-panel-radius:22px;--zyn-card-radius:20px}
+.shell{padding-bottom:calc(var(--zyn-nav-height) + 118px + env(safe-area-inset-bottom,0px));}
+.topbar{padding:2px 2px 4px;}
+.section-title{margin:18px 0 14px;padding:18px 20px;border:1px solid var(--border);border-radius:var(--zyn-panel-radius);background:linear-gradient(145deg,var(--surface),var(--surface2));box-shadow:0 10px 30px rgba(34,25,64,.07);}
+.section-title h2{font-size:24px;letter-spacing:-.02em;}
+.section-title .muted{max-width:620px;margin-top:4px;line-height:1.45}
+.card{border-radius:var(--zyn-card-radius);box-shadow:0 8px 24px rgba(34,25,64,.065);}
+.card:hover{border-color:color-mix(in srgb,var(--primary) 22%,var(--border));}
+.list-item{border-radius:16px;background:color-mix(in srgb,var(--surface) 86%,var(--surface2));}
+.btn,.icon-btn{min-height:42px;border-radius:13px;font-weight:600;transition:transform .15s ease,border-color .15s ease,background .15s ease;}
+.btn:active,.icon-btn:active,.home-panel-card:active,.wellness-card:active{transform:scale(.98)}
+.nav{height:var(--zyn-nav-height);z-index:25;padding-bottom:env(safe-area-inset-bottom,0px);}
+.nav-inner{height:100%;padding:7px 12px;align-items:center;gap:6px;}
+.nav button{min-height:58px;border-radius:15px;font-weight:600;}
+.nav button .ui-icon{width:21px;height:21px;}
+.nav button.active{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 24%,transparent);}
+.music-dock{bottom:calc(var(--zyn-nav-height) + var(--zyn-dock-gap) + env(safe-area-inset-bottom,0px));z-index:24;width:min(820px,calc(100% - 18px));}
+.music-dock.expanded{bottom:calc(var(--zyn-nav-height) + var(--zyn-dock-gap) + env(safe-area-inset-bottom,0px));}
+.music-dock-main{min-height:64px;padding:9px 11px;}
+.music-dock.expanded .music-dock-main{border-top:1px solid var(--border);}
+.music-dock-open{display:none;}
+.music-dock .music-dock-btn{min-height:38px;}
+.home-hero,.planning-hero,.wellness-hero,.assistant-hero,.music-player,.food-hero,.gym-hero{border-radius:24px;box-shadow:0 10px 30px rgba(34,25,64,.065);}
+.home-panel-card,.wellness-card{border-radius:20px;box-shadow:0 8px 24px rgba(34,25,64,.055);}
+.home-panel-card .panel-copy h3{font-size:18px;letter-spacing:-.01em;}
+.home-panel-card .panel-copy p{line-height:1.45;}
+.panel-stat{margin-top:10px;}
+@media(max-width:700px){
+  :root{--zyn-nav-height:74px;--zyn-dock-gap:8px}
+  .shell{padding:14px 12px calc(var(--zyn-nav-height) + 120px + env(safe-area-inset-bottom,0px));}
+  .section-title{padding:16px;border-radius:20px;margin:14px 0 12px;align-items:flex-start;}
+  .section-title h2{font-size:21px;}
+  .section-title .actions{flex-wrap:wrap;justify-content:flex-end;}
+  .section-title .btn{min-height:40px;padding:9px 11px;}
+  .nav-inner{padding:6px 9px;}
+  .nav button{font-size:10px;min-height:56px;padding:7px 2px;}
+  .nav button .ui-icon{width:20px;height:20px;}
+  .music-dock{width:calc(100% - 14px);border-radius:17px;}
+  .music-dock-main{min-height:58px;padding:8px;}
+  .music-dock-cover{width:40px;height:40px;flex-basis:40px;}
+  .music-dock-meta b{font-size:12px;}
+  .music-dock-meta span{font-size:10px;}
+  .music-dock-btn{width:36px!important;height:36px!important;flex-basis:36px!important;}
+}
