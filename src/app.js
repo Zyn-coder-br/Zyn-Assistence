@@ -1,6 +1,6 @@
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 let db;
 let currentView = "home";
 let theme = localStorage.getItem("zyn-theme") || "light";
@@ -9,6 +9,7 @@ let goals = [];
 let earnings = [];
 let gymProfile = null, gymPlans = [], gymSessions = [];
 let foodProfile = null, mealPlans = [], shoppingItems = [];
+let financeProfile = null, financeAccounts = [], financeTransactions = [], financeBills = [], financeGoals = [];
 
 document.body.className = theme;
 const app = document.querySelector("#app");
@@ -18,7 +19,7 @@ function openDB(){
     const request=indexedDB.open(DB_NAME,DB_VERSION);
     request.onupgradeneeded=()=>{
       const database=request.result;
-      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems"].forEach(store=>{
+      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals"].forEach(store=>{
         if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
       });
     };
@@ -185,7 +186,92 @@ function goalsView(){
  <div class="stack">${goals.map(g=>{const amount=weekEarnings(g);const p=goalProgress(g);return `<section class="card full"><div class="row"><h3>🎯 ${esc(g.name)}</h3><span class="tag">${g.active===false?"Inativa":"Ativa"}</span></div><div class="row"><div><div class="metric">${money(amount)}</div><div class="muted">de ${money(g.target)} na semana</div></div><div style="text-align:right"><div class="metric">${p.toFixed(1)}%</div><div class="muted">concluído</div></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Diária: ${money(g.dailyTarget)}</span><span class="muted">Hoje: ${money(dayAmount(g))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(g,d);const hit=val>=g.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div><div class="actions" style="margin-top:15px"><button class="btn primary" data-goal-earning="${g.id}">+ Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">Editar</button><button class="btn danger" data-goal-delete="${g.id}">Excluir</button></div></section>`}).join("")||`<div class="empty">Nenhuma meta cadastrada. Crie sua primeira meta semanal.</div>`}</div>`;
 }
 
-function financeView(){return `<div class="section-title"><h2>Finanças</h2></div><div class="card full"><h3>Resumo</h3><p class="muted">O módulo financeiro completo será conectado às receitas e despesas em uma próxima etapa. Os registros de ganhos das metas já ficam armazenados localmente.</p><div class="metric">${money(earnings.reduce((s,e)=>s+Number(e.amount||0),0))}</div><div class="muted">Total de ganhos registrados</div></div>`}
+
+function monthKey(date=todayISO()){ return String(date).slice(0,7); }
+function financeMonthLabel(key=monthKey()){ const [y,m]=key.split("-"); return new Date(Number(y),Number(m)-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}); }
+function financeMonthData(key=monthKey()){
+ const tx=financeTransactions.filter(x=String(x.date||"").slice(0,7)===key);
+ const income=tx.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount||0),0);
+ const expense=tx.filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount||0),0);
+ const bills=financeBills.filter(x=>x.active!==false && String(x.dueDate||"").slice(0,7)===key);
+ const billsTotal=bills.reduce((a,x)=>a+Number(x.amount||0),0);
+ const goal=financeGoals.find(x=>x.active!==false);
+ const saved=tx.filter(x=>x.type==="saving").reduce((a,x)=>a+Number(x.amount||0),0);
+ return {tx,income,expense,bills,billsTotal,goal,saved,available:income-expense-billsTotal-saved};
+}
+function financeCategoryTotals(key=monthKey()){
+ const out={};
+ financeTransactions.filter(x=>x.type==="expense" && String(x.date||"").slice(0,7)===key).forEach(x=>{out[x.category||"Outros"]=(out[x.category||"Outros"]||0)+Number(x.amount||0)});
+ return Object.entries(out).sort((a,b)=>b[1]-a[1]);
+}
+function financeView(){
+ const key=financeProfile?.selectedMonth||monthKey(), d=financeMonthData(key), cats=financeCategoryTotals(key);
+ const plannedIncome=Number(financeProfile?.monthlyIncome||0);
+ const fixed=financeBills.filter(x=>x.active!==false).reduce((a,x)=>a+Number(x.amount||0),0);
+ const limit=Math.max(0,(plannedIncome||d.income)-fixed-(financeProfile?.monthlySavingsTarget||0));
+ return `<div class="section-title"><h2>💰 Finanças</h2><div class="actions"><button class="btn" id="financeProfileBtn">⚙️ Planejamento</button><button class="btn primary" id="financeAdd">+ Lançamento</button></div></div>
+ <section class="hero"><div class="eyebrow" style="color:#e8e2ff">CONTROLE FINANCEIRO</div><h2>Faça o dinheiro sobrar.</h2><p>O Zyn separa o que entrou, o que já está comprometido e o que ainda pode ser gasto.</p></section>
+ <section class="card full"><div class="row"><div><div class="eyebrow">MÊS</div><h3 style="text-transform:capitalize">${esc(financeMonthLabel(key))}</h3></div><input id="financeMonth" type="month" value="${key}" style="max-width:170px"></div></section>
+ <div class="grid">
+  <section class="card"><div class="muted">Entradas</div><div class="metric">${money(d.income)}</div><div class="muted">Registradas no mês</div></section>
+  <section class="card"><div class="muted">Despesas</div><div class="metric">${money(d.expense)}</div><div class="muted">Gastos lançados</div></section>
+  <section class="card"><div class="muted">Contas fixas</div><div class="metric">${money(d.billsTotal)}</div><div class="muted">${d.bills.length} conta(s) no mês</div></section>
+  <section class="card"><div class="muted">Pode sobrar</div><div class="metric">${money(Math.max(0,d.available))}</div><div class="muted">${d.available>=0?"Dentro do planejamento":"Orçamento estourado"}</div></section>
+ </div>
+ <section class="card full"><div class="row"><h3>🎯 Plano para sobrar dinheiro</h3><span class="tag">${financeProfile?.monthlySavingsTarget?money(financeProfile.monthlySavingsTarget)+" alvo":"Defina um alvo"}</span></div>
+  <div class="row"><div><div class="metric">${money(d.saved)}</div><div class="muted">guardado no mês</div></div><div style="text-align:right"><div class="metric">${money(Math.max(0,(financeProfile?.monthlySavingsTarget||0)-d.saved))}</div><div class="muted">faltam para a meta</div></div></div>
+  <div class="progress"><div style="width:${financeProfile?.monthlySavingsTarget?Math.min(100,d.saved/financeProfile.monthlySavingsTarget*100):0}%"></div></div>
+  <p class="muted" style="margin-top:12px">Limite sugerido de gastos variáveis: <b>${money(limit)}</b> no mês, antes dos lançamentos variáveis.</p>
+ </section>
+ <section class="card full"><div class="row"><h3>📌 Contas fixas</h3><button class="btn" id="financeBill">+ Conta</button></div>
+  <div class="stack">${financeBills.filter(x=>x.active!==false).map(x=>`<div class="list-item"><div><b>${esc(x.name)}</b><div class="muted">Vencimento: ${fmtDate(x.dueDate)}</div></div><b>${money(x.amount)}</b></div>`).join("")||`<div class="empty">Cadastre aluguel, internet, telefone, parcelas e outras contas recorrentes.</div>`}</div>
+ </section>
+ <section class="card full"><div class="row"><h3>📒 Últimos lançamentos</h3><span class="tag">${d.tx.length} no mês</span></div>
+  <div class="stack">${d.tx.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,12).map(x=>`<div class="list-item"><div><b>${esc(x.description)}</b><div class="muted">${esc(x.category||"Outros")} • ${fmtDate(x.date)}${x.account?" • "+esc(x.account):""}</div></div><div style="text-align:right"><b class="${x.type==="expense"?"danger-text":""}">${x.type==="expense"?"−":"+"}${money(x.amount)}</b></div></div>`).join("")||`<div class="empty">Nenhum lançamento neste mês.</div>`}</div>
+ </section>
+ <section class="card full"><h3>📊 Onde o dinheiro está indo</h3>
+  ${cats.length?`<div class="stack">${cats.slice(0,8).map(([c,v])=>`<div><div class="row"><span>${esc(c)}</span><b>${money(v)}</b></div><div class="progress"><div style="width:${d.expense?Math.min(100,v/d.expense*100):0}%"></div></div></div>`).join("")}</div>`:`<div class="empty">Registre despesas para o Zyn mostrar os maiores pontos de consumo.</div>`}
+ </section>
+ </div>`;
+}
+function financeProfileForm(){
+ const p=financeProfile||{};
+ const el=modal(`<div class="row"><h2>Planejamento financeiro</h2><button class="btn" id="close">×</button></div>
+ <form id="financeProfileForm" class="stack"><div class="form-grid">
+ <div class="field full"><label>Renda fixa mensal (R$)</label><input name="income" type="number" min="0" step=".01" value="${p.monthlyIncome||""}" placeholder="Ex.: salário"></div>
+ <div class="field"><label>Meta para guardar por mês</label><input name="saving" type="number" min="0" step=".01" value="${p.monthlySavingsTarget||0}"></div>
+ <div class="field"><label>Limite pessoal de cartão</label><input name="cardLimit" type="number" min="0" step=".01" value="${p.cardLimit||0}"></div>
+ <div class="field full"><label>Regra pessoal</label><input name="rule" value="${esc(p.rule||"Primeiro separar o que preciso pagar, depois decidir o que posso gastar.")}"></div>
+ </div><p class="muted">A renda de Uber e Entregas continua sendo registrada pelas Metas e também pode ser lançada aqui como entrada. O objetivo é enxergar tudo em um único mês.</p>
+ <button class="btn primary">Salvar planejamento</button></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+ el.querySelector("#financeProfileForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);financeProfile={id:1,monthlyIncome:Number(f.get("income")||0),monthlySavingsTarget:Number(f.get("saving")||0),cardLimit:Number(f.get("cardLimit")||0),rule:f.get("rule"),selectedMonth:financeProfile?.selectedMonth||monthKey()};await put("financeProfile",financeProfile);closeModal(el);await loadData();render();toast("Planejamento salvo")};
+}
+function financeTransactionForm(){
+ const el=modal(`<div class="row"><h2>Novo lançamento</h2><button class="btn" id="close">×</button></div>
+ <form id="financeTxForm" class="stack"><div class="form-grid">
+ <div class="field"><label>Tipo</label><select name="type"><option value="expense">Despesa</option><option value="income">Entrada</option><option value="saving">Guardado</option></select></div>
+ <div class="field"><label>Valor (R$) *</label><input name="amount" type="number" min=".01" step=".01" required></div>
+ <div class="field full"><label>Descrição *</label><input name="description" required placeholder="Ex.: supermercado"></div>
+ <div class="field"><label>Data</label><input name="date" type="date" value="${todayISO()}"></div>
+ <div class="field"><label>Categoria</label><select name="category"><option>Alimentação</option><option>Transporte</option><option>Moradia</option><option>Contas</option><option>Saúde</option><option>Lazer</option><option>Trabalho</option><option>Compras</option><option>Cartão</option><option>Outros</option></select></div>
+ <div class="field"><label>Forma/conta</label><select name="account"><option>Dinheiro</option><option>Pix</option><option>Débito</option><option>Crédito</option><option>Conta bancária</option></select></div>
+ <div class="field full"><label>Observação</label><input name="notes" placeholder="Opcional"></div>
+ </div><button class="btn primary">Salvar lançamento</button></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+ el.querySelector("#financeTxForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("financeTransactions",{type:f.get("type"),amount:Number(f.get("amount")),description:f.get("description"),date:f.get("date"),category:f.get("category"),account:f.get("account"),notes:f.get("notes"),createdAt:new Date().toISOString()});closeModal(el);await loadData();render();toast("Lançamento salvo")};
+}
+function financeBillForm(){
+ const el=modal(`<div class="row"><h2>Nova conta fixa</h2><button class="btn" id="close">×</button></div>
+ <form id="financeBillForm" class="stack"><div class="form-grid">
+ <div class="field full"><label>Nome *</label><input name="name" required placeholder="Ex.: Internet"></div>
+ <div class="field"><label>Valor (R$) *</label><input name="amount" type="number" min="0" step=".01" required></div>
+ <div class="field"><label>Vencimento</label><input name="dueDate" type="date" value="${todayISO()}"></div>
+ </div><p class="muted">Na primeira versão, cadastre a conta para o mês correspondente. Depois vamos adicionar recorrência automática.</p><button class="btn primary">Salvar conta</button></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+ el.querySelector("#financeBillForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("financeBills",{name:f.get("name"),amount:Number(f.get("amount")),dueDate:f.get("dueDate"),active:true});closeModal(el);await loadData();render();toast("Conta cadastrada")};
+}
+
 function habitsView(){return `<div class="section-title"><h2>Hábitos e GYM</h2></div><div class="card full"><div class="empty">Módulo preparado para a próxima etapa. A estrutura local já reserva espaço para hábitos e treinos.</div></div>`}
 
 function reminderForm(existing={}){
@@ -209,7 +295,7 @@ function earningForm(goalId){
  el.querySelector("#earningForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("earnings",{amount:Number(f.get("amount")),date:f.get("date"),source:f.get("source"),notes:f.get("notes"),goalId:goal?.id||null,createdAt:new Date().toISOString()});closeModal(el);await loadData();render();toast("Ganho registrado")};
 }
 
-async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems")}
+async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals")}
 function bind(){
  document.querySelector("#themeBtn").onclick=toggleTheme;
  document.querySelector("#updateBtn").onclick=()=>toast("Assistente Zyn v"+APP_VERSION);
@@ -241,6 +327,10 @@ function bind(){
  document.querySelector("#beachWalk")?.addEventListener("click",beachForm);
  document.querySelector("#finishGym")?.addEventListener("click",async()=>{const p=gymToday(), ex=GYM_EX[p.workout]||[];const records=ex.map((x,i)=>({exercise:x[0],load:Number(document.querySelector(`[data-load="${i}"]`)?.value||0),reps:Number(document.querySelector(`[data-reps="${i}"]`)?.value||0)}));await put("gymSessions",{date:todayISO(),type:"Treino de academia",workout:p.workout,records});await loadData();toast("Treino salvo");currentView="gym";render()});
  document.querySelectorAll("[data-done]").forEach(b=>b.onclick=()=>{b.textContent="✓ Concluído";b.classList.add("primary")});
+ document.querySelector("#financeProfileBtn")?.addEventListener("click",financeProfileForm);
+ document.querySelector("#financeAdd")?.addEventListener("click",financeTransactionForm);
+ document.querySelector("#financeBill")?.addEventListener("click",financeBillForm);
+ document.querySelector("#financeMonth")?.addEventListener("change",async e=>{financeProfile={...(financeProfile||{id:1}),selectedMonth:e.target.value};await put("financeProfile",financeProfile);await loadData();render()});
  document.querySelector("#foodProfile")?.addEventListener("click",foodProfileForm);
  document.querySelector("#generateMeals")?.addEventListener("click",generateMeals);
  document.querySelector("#newShopping")?.addEventListener("click",shoppingForm);
