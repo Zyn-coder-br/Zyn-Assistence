@@ -1,4 +1,4 @@
-const APP_VERSION = "1.5.4";
+const APP_VERSION = "1.5.5";
 const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 5;
 let db;
