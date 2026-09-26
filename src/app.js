@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.7.1";
+const APP_VERSION = "1.7.2";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.7.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.7.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -24,7 +24,61 @@ let financeProfile = null, financeAccounts = [], financeTransactions = [], finan
 let deferredInstallPrompt = null;
 let musicTracks = [], musicPlaylists = [], musicSettings = null;
 let musicAudio = null, musicCurrentTrackId = null, musicQueue = [], musicQueueIndex = -1, musicSearchBusy = false;
+let musicPreviewTrack = null;
+let youtubePlayer = null, youtubeApiPromise = null;
 
+function getYouTubeId(input){
+  const value=String(input||"").trim();
+  if(!value)return "";
+  try{
+    const u=new URL(value);
+    if(u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("/")[0].slice(0,11);
+    if(u.hostname.includes("youtube.com")){
+      if(u.pathname==="/watch") return (u.searchParams.get("v")||"").slice(0,11);
+      const parts=u.pathname.split("/").filter(Boolean);
+      const idx=parts.findIndex(x=>x==="embed"||x==="shorts"||x==="live");
+      if(idx>=0) return String(parts[idx+1]||"").slice(0,11);
+    }
+  }catch(e){}
+  return "";
+}
+function isYouTubeTrack(track){return !!track && track.source==="youtube" && !!track.youtubeId;}
+function loadYouTubeAPI(){
+  if(window.YT?.Player) return Promise.resolve(window.YT);
+  if(youtubeApiPromise) return youtubeApiPromise;
+  youtubeApiPromise=new Promise((resolve,reject)=>{
+    const old=window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady=()=>{try{old?.();}catch(e){} resolve(window.YT);};
+    const script=document.createElement("script");
+    script.src="https://www.youtube.com/iframe_api";
+    script.async=true;
+    script.onerror=()=>{youtubeApiPromise=null;reject(new Error("YouTube API indisponível"));};
+    document.head.appendChild(script);
+  });
+  return youtubeApiPromise;
+}
+async function playYouTubeTrack(track,queueIds=null,index=null){
+  if(!isYouTubeTrack(track)){toast("Link do YouTube inválido");return;}
+  ensureMusicAudio().pause();
+  musicPreviewTrack=null;
+  if(queueIds){musicQueue=[...queueIds];musicQueueIndex=Math.max(0,index??musicQueue.findIndex(id=>String(id)===String(track.id)));}
+  else if(!musicQueue.length){musicQueue=[track.id];musicQueueIndex=0;}
+  musicCurrentTrackId=track.id;
+  musicSettings={...(musicSettings||{id:1}),currentTrackId:track.id,queue:musicQueue,queueIndex:musicQueueIndex};
+  await put("musicSettings",musicSettings);
+  render();
+  try{
+    const YT=await loadYouTubeAPI();
+    const host=document.querySelector("#youtubePlayer");
+    if(!host)return;
+    if(youtubePlayer){try{youtubePlayer.destroy();}catch(e){} youtubePlayer=null;}
+    youtubePlayer=new YT.Player("youtubePlayer",{videoId:track.youtubeId,playerVars:{playsinline:1,autoplay:1,origin:location.origin,rel:0},events:{
+      onReady:e=>{try{e.target.playVideo();}catch(err){} updateMediaSession();},
+      onStateChange:e=>{if(e.data===0)playNextMusic(1); if(e.data===1)updateMediaSession(); if(e.data===2)updateMediaSession();},
+      onError:()=>toast("⚠️ Este vídeo não pode ser reproduzido incorporado pelo YouTube.")
+    }});
+  }catch(e){toast("⚠️ Não foi possível carregar o player do YouTube");}
+}
 function ensureMusicAudio(){
   if(musicAudio) return musicAudio;
   musicAudio = document.createElement("audio");
@@ -43,7 +97,7 @@ function ensureMusicAudio(){
   });
   musicAudio.addEventListener("play",()=>{updateMusicUI();updateMediaSession();});
   musicAudio.addEventListener("pause",()=>{updateMusicUI();updateMediaSession();});
-  musicAudio.addEventListener("ended",()=>playNextMusic(1));
+  musicAudio.addEventListener("ended",()=>{if(musicPreviewTrack){musicPreviewTrack=null;musicAudio.removeAttribute("src");updateMusicUI();return;}playNextMusic(1);});
   return musicAudio;
 }
 function musicTime(seconds){if(!Number.isFinite(seconds)||seconds<0)return "0:00";const m=Math.floor(seconds/60),s=Math.floor(seconds%60);return `${m}:${String(s).padStart(2,"0")}`;}
@@ -51,19 +105,22 @@ function currentMusicTrack(){return musicTracks.find(t=>String(t.id)===String(mu
 function musicQueueTracks(){return musicQueue.map(id=>musicTracks.find(t=>String(t.id)===String(id))).filter(Boolean);}
 function updateMediaSession(){
   if(!("mediaSession" in navigator)) return;
-  const track=currentMusicTrack();
+  const track=musicPreviewTrack||currentMusicTrack();
   if(!track){navigator.mediaSession.metadata=null;return;}
   try{navigator.mediaSession.metadata=new MediaMetadata({title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"Zyn Music",artwork:track.cover?[{src:track.cover,sizes:"512x512",type:"image/jpeg"}]:[]});}catch(e){}
-  try{navigator.mediaSession.playbackState=musicAudio?.paused?"paused":"playing";}catch(e){}
+  try{navigator.mediaSession.playbackState=(isYouTubeTrack(track) ? "playing" : (musicAudio?.paused?"paused":"playing"));}catch(e){}
 }
 function setupMediaSession(){
   if(!("mediaSession" in navigator)) return;
-  const actions={play:()=>musicAudio?.play(),pause:()=>musicAudio?.pause(),previoustrack:()=>playNextMusic(-1),nexttrack:()=>playNextMusic(1),seekbackward:()=>{if(musicAudio)musicAudio.currentTime=Math.max(0,musicAudio.currentTime-10)},seekforward:()=>{if(musicAudio)musicAudio.currentTime=Math.min(musicAudio.duration||0,musicAudio.currentTime+10)},seekto:(d)=>{if(musicAudio&&Number.isFinite(d.seekTime))musicAudio.currentTime=d.seekTime}};
+  const actions={play:()=>isYouTubeTrack(currentMusicTrack())?(youtubePlayer?.playVideo?.()):musicAudio?.play(),pause:()=>isYouTubeTrack(currentMusicTrack())?(youtubePlayer?.pauseVideo?.()):musicAudio?.pause(),previoustrack:()=>playNextMusic(-1),nexttrack:()=>playNextMusic(1),seekbackward:()=>{if(isYouTubeTrack(currentMusicTrack())){const t=youtubePlayer?.getCurrentTime?.()||0;youtubePlayer?.seekTo?.(Math.max(0,t-10),true);}else if(musicAudio)musicAudio.currentTime=Math.max(0,musicAudio.currentTime-10)},seekforward:()=>{if(isYouTubeTrack(currentMusicTrack())){const t=youtubePlayer?.getCurrentTime?.()||0;youtubePlayer?.seekTo?.(t+10,true);}else if(musicAudio)musicAudio.currentTime=Math.min(musicAudio.duration||0,musicAudio.currentTime+10)},seekto:(d)=>{if(!Number.isFinite(d.seekTime))return;if(isYouTubeTrack(currentMusicTrack()))youtubePlayer?.seekTo?.(d.seekTime,true);else if(musicAudio)musicAudio.currentTime=d.seekTime}};
   for(const [name,fn] of Object.entries(actions)){try{navigator.mediaSession.setActionHandler(name,fn)}catch(e){}}
 }
 async function playMusicTrack(track,queueIds=null,index=null){
+  if(isYouTubeTrack(track)) return playYouTubeTrack(track,queueIds,index);
   ensureMusicAudio();
   if(!track?.url){toast("⚠️ Esta música não tem uma URL de áudio válida");return;}
+  musicPreviewTrack=null;
+  if(youtubePlayer){try{youtubePlayer.pauseVideo();youtubePlayer.destroy();}catch(e){} youtubePlayer=null;}
   if(queueIds){musicQueue=[...queueIds];musicQueueIndex=Math.max(0,index??musicQueue.findIndex(id=>String(id)===String(track.id)));}
   else if(!musicQueue.length){musicQueue=[track.id];musicQueueIndex=0;}
   musicCurrentTrackId=track.id;
@@ -88,10 +145,12 @@ async function playNextMusic(direction=1){
   musicQueue=ids;musicQueueIndex=idx;
   await playMusicTrack(track,ids,idx);
 }
-async function toggleMusicPlay(){ensureMusicAudio();if(!musicAudio.src){const track=currentMusicTrack()||musicTracks[0];if(track)return playMusicTrack(track);toast("Adicione uma música primeiro");return;}if(musicAudio.paused){try{await musicAudio.play()}catch(e){toast("Toque no play novamente para iniciar");}}else musicAudio.pause();updateMusicUI();updateMediaSession();}
+async function toggleMusicPlay(){const track=currentMusicTrack()||musicTracks[0];if(isYouTubeTrack(track)){if(!youtubePlayer)return playMusicTrack(track);const state=youtubePlayer.getPlayerState?.();if(state===1)youtubePlayer.pauseVideo();else youtubePlayer.playVideo();updateMediaSession();return;}ensureMusicAudio();if(!musicAudio.src){if(track)return playMusicTrack(track);toast("Adicione uma música primeiro");return;}if(musicAudio.paused){try{await musicAudio.play()}catch(e){toast("Toque no play novamente para iniciar");}}else musicAudio.pause();updateMusicUI();updateMediaSession();}
 async function addMusicTrack(track,playlistId=null){
-  const payload={title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"",cover:track.cover||"",url:track.url||track.previewUrl||"",source:track.source||"direct",duration:track.duration||0,createdAt:new Date().toISOString()};
-  if(!payload.url){toast("Informe uma URL de áudio");return;}
+  const youtubeId=track.youtubeId||getYouTubeId(track.url);
+  const source=youtubeId?"youtube":(track.source||"direct");
+  const payload={title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"",cover:track.cover||"",url:track.url||track.previewUrl||"",youtubeId:youtubeId||"",source,duration:track.duration||0,createdAt:new Date().toISOString()};
+  if(!payload.url && !payload.youtubeId){toast("Informe um link válido");return;}
   await put("musicTracks",payload);
   await loadData();
   const added=musicTracks.slice().sort((a,b)=>Number(b.id)-Number(a.id))[0];
@@ -99,19 +158,22 @@ async function addMusicTrack(track,playlistId=null){
   toast("🎵 Música adicionada");
 }
 async function createMusicPlaylist(name){const clean=String(name||"").trim();if(!clean)return;await put("musicPlaylists",{name:clean,trackIds:[],createdAt:new Date().toISOString()});await loadData();render();toast("🎼 Playlist criada");}
-function updateMusicUI(){const track=currentMusicTrack(), title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn");if(title)title.textContent=track?.title||"Nenhuma música selecionada";if(artist)artist.textContent=track?.artist||"Escolha uma música ou adicione um link";if(cover){cover.src=track?.cover||"";cover.style.display=track?.cover?"block":"none";}if(play)play.textContent=musicAudio&&!musicAudio.paused?"⏸️":"▶️";const status=document.querySelector("#musicStatus");if(status)status.textContent=musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado";}
+function updateMusicUI(){const track=musicPreviewTrack||currentMusicTrack(), title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn");if(title)title.textContent=track?.title||"Nenhuma música selecionada";if(artist)artist.textContent=track?.artist||"Escolha uma música ou adicione um link";if(cover){if(cover.tagName==="IMG"){cover.src=track?.cover||"";cover.style.display=track?.cover?"block":"none";}}if(play){const yt=isYouTubeTrack(track);play.textContent=yt?(youtubePlayer?.getPlayerState?.()===1?"⏸️":"▶️"):(musicAudio&&!musicAudio.paused?"⏸️":"▶️");}const status=document.querySelector("#musicStatus");if(status)status.textContent=musicPreviewTrack?"Prévia":(isYouTubeTrack(track)?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado"));}
 function musicView(){
   const track=currentMusicTrack();
   const playlists=musicPlaylists;
-  return `<div class="section-title"><div><h2>🎧 Zyn Music</h2><div class="muted">Seu player pessoal, com suporte a controles de mídia do Android.</div></div><div class="actions"><button class="btn" id="musicPlaylistNew">+ Playlist</button><button class="btn primary" id="musicAddLink">+ Link</button></div></div>
-  <section class="music-player card full"><div class="music-now">${track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa" />`:`<div class="music-cover-placeholder" id="musicNowCover">🎧</div>`}<div class="music-meta"><div class="eyebrow">TOCANDO AGORA</div><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música selecionada")}</h2><div class="muted" id="musicNowArtist">${esc(track?.artist||"Escolha uma música ou adicione um link")}</div><div class="tag" id="musicStatus">${musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado"}</div></div></div>
-  <input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Progresso da música"/><div class="music-times"><span id="musicCurrentTime">0:00</span><span id="musicDuration">0:00</span></div><div class="music-controls"><button class="music-control" id="musicPrev" title="Anterior">⏮️</button><button class="music-control music-play" id="musicPlayBtn" title="Play/Pause">${musicAudio&&!musicAudio.paused?"⏸️":"▶️"}</button><button class="music-control" id="musicNext" title="Próxima">⏭️</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><label class="music-volume">🔊 <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="${musicAudio?musicAudio.volume:1}"/></label></div></section>
-  <section class="card full"><div class="row"><h3>🔎 Buscar artista / banda</h3><span class="tag">prévia oficial</span></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">A busca encontra prévias disponíveis para reprodução. Para músicas completas, use um link direto de áudio autorizado.</div></div></section>
+  const youtube=isYouTubeTrack(track);
+  const cover=track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa" />`:`<div class="music-cover-placeholder" id="musicNowCover">🎧</div>`;
+  const playerMedia=youtube?`<div class="youtube-player-wrap"><div id="youtubePlayer"></div><div class="youtube-note">▶️ Reprodução completa pelo player oficial do YouTube. O comportamento em segundo plano/tela bloqueada depende do navegador e do próprio YouTube.</div></div>`:``;
+  return `<div class="section-title"><div><h2>🎧 Zyn Music</h2><div class="muted">Player pessoal com prévias, links diretos e vídeos do YouTube.</div></div><div class="actions"><button class="btn" id="musicPlaylistNew">+ Playlist</button><button class="btn primary" id="musicAddLink">+ Link</button></div></div>
+  <section class="music-player card full">${playerMedia}<div class="music-now">${cover}<div class="music-meta"><div class="eyebrow">TOCANDO AGORA</div><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música selecionada")}</h2><div class="muted" id="musicNowArtist">${esc(track?.artist||"Escolha uma música ou adicione um link")}</div><div class="tag" id="musicStatus">${youtube?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado")}</div></div></div>
+  ${youtube?``:`<input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Progresso da música"/><div class="music-times"><span id="musicCurrentTime">0:00</span><span id="musicDuration">0:00</span></div>`}<div class="music-controls"><button class="music-control" id="musicPrev" title="Anterior">⏮️</button><button class="music-control music-play" id="musicPlayBtn" title="Play/Pause">▶️</button><button class="music-control" id="musicNext" title="Próxima">⏭️</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><label class="music-volume">🔊 <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="${musicAudio?musicAudio.volume:1}"/></label></div></section>
+  <section class="card full"><div class="row"><h3>🔎 Buscar artista / banda</h3><span class="tag">prévia oficial</span></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">Busque uma música e <b>ouça a prévia antes de adicionar</b> à playlist.</div></div></section>
   <section class="card full"><div class="row"><h3>🎼 Minhas playlists</h3><span class="tag">${playlists.length}</span></div><div class="music-playlists">${playlists.map(p=>`<button class="music-playlist" data-music-playlist="${p.id}"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></button>`).join("")||`<div class="empty">Crie sua primeira playlist.</div>`}</div></section>
-  <section class="card full"><div class="row"><h3>🎵 Biblioteca</h3><span class="tag">${musicTracks.length} faixa(s)</span></div><div class="stack">${musicTracks.slice().reverse().map(t=>`<div class="list-item music-track-item"><div class="music-track-main">${t.cover?`<img src="${esc(t.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(t.title)}</b><div class="muted">${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":""}</div></div></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||`<div class="empty">Nenhuma música ainda. Adicione um link direto ou busque um artista.</div>`}</div></section>`;
+  <section class="card full"><div class="row"><h3>🎵 Biblioteca</h3><span class="tag">${musicTracks.length} faixa(s)</span></div><div class="stack">${musicTracks.slice().reverse().map(t=>`<div class="list-item music-track-item"><div class="music-track-main">${t.cover?`<img src="${esc(t.cover)}" alt=""/>`:`<div class="mini-cover">${isYouTubeTrack(t)?"▶️":"🎵"}</div>`}<div><b>${esc(t.title)}</b><div class="muted">${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":t.source==="youtube"?" • YouTube":""}</div></div></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||`<div class="empty">Nenhuma música ainda. Adicione um link direto ou um link do YouTube.</div>`}</div></section>`;
 }
 async function musicLinkForm(){
- const el=modal(`<div class="section-title"><h3>🔗 Adicionar música por link</h3><button class="btn" id="close">Fechar</button></div><form id="musicLinkForm" class="form-grid"><div class="field full"><label>URL direta do áudio</label><input name="url" type="url" placeholder="https://.../musica.mp3" required /></div><div class="field"><label>Nome da música</label><input name="title" required /></div><div class="field"><label>Artista</label><input name="artist" /></div><div class="field"><label>Álbum</label><input name="album" /></div><div class="field"><label>Capa (URL opcional)</label><input name="cover" type="url" /></div><div class="field full"><label>Playlist</label><select name="playlist"><option value="">Sem playlist</option>${musicPlaylists.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div><div class="actions field full"><button class="btn primary" type="submit">Adicionar</button></div></form>`);
+ const el=modal(`<div class="section-title"><h3>🔗 Adicionar música por link</h3><button class="btn" id="close">Fechar</button></div><form id="musicLinkForm" class="form-grid"><div class="field full"><label>Link da música</label><input name="url" type="url" placeholder="Cole um link de áudio ou do YouTube" required /><div class="muted field-help">YouTube: o vídeo será reproduzido pelo player oficial. Áudio direto: usa o player de áudio do Zyn.</div></div><div class="field"><label>Nome da música</label><input name="title" required /></div><div class="field"><label>Artista</label><input name="artist" /></div><div class="field"><label>Álbum</label><input name="album" /></div><div class="field"><label>Capa (URL opcional)</label><input name="cover" type="url" /></div><div class="field full"><label>Playlist</label><select name="playlist"><option value="">Sem playlist</option>${musicPlaylists.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div><div class="actions field full"><button class="btn primary" type="submit">Adicionar</button></div></form>`);
  el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#musicLinkForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await addMusicTrack({url:String(f.get("url")||"").trim(),title:f.get("title"),artist:f.get("artist"),album:f.get("album"),cover:f.get("cover"),source:"direct"},f.get("playlist")||null);closeModal(el);render();};
 }
 async function searchMusicArtist(query){
@@ -608,10 +670,11 @@ function bind(){
  document.querySelector("#musicShuffle")?.addEventListener("click",async()=>{if(!musicTracks.length)return toast("Adicione músicas primeiro");const ids=musicTracks.map(t=>t.id).sort(()=>Math.random()-0.5);musicQueue=ids;musicQueueIndex=0;await playMusicTrack(musicTracks.find(t=>t.id===ids[0]),ids,0);});
  document.querySelectorAll("[data-music-play]").forEach(b=>b.onclick=async()=>{const t=musicTracks.find(x=>x.id===Number(b.dataset.musicPlay));if(t)await playMusicTrack(t,musicTracks.map(x=>x.id),musicTracks.findIndex(x=>x.id===t.id));});
  document.querySelectorAll("[data-music-delete]").forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.musicDelete);if(confirm("Excluir esta música da biblioteca?")){if(String(musicCurrentTrackId)===String(id)){ensureMusicAudio().pause();ensureMusicAudio().removeAttribute("src");musicCurrentTrackId=null;}await remove("musicTracks",id);for(const p of musicPlaylists){if((p.trackIds||[]).includes(id)){p.trackIds=p.trackIds.filter(x=>x!==id);await put("musicPlaylists",p);}}await loadData();render();}});
- document.querySelector("#musicSearchForm")?.addEventListener("submit",async e=>{e.preventDefault();const q=String(new FormData(e.target).get("query")||"").trim();if(q.length<2)return toast("Digite pelo menos 2 caracteres");const box=document.querySelector("#musicSearchResults");if(box)box.innerHTML='<div class="empty">🔎 Buscando…</div>';try{const results=await searchMusicArtist(q);const target=document.querySelector("#musicSearchResults");if(!target)return;if(!results.length){target.innerHTML='<div class="empty">Nenhuma prévia encontrada para essa busca.</div>';return;}target.innerHTML=results.map((r,i)=>`<div class="list-item"><div class="music-track-main">${r.cover?`<img src="${esc(r.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(r.title)}</b><div class="muted">${esc(r.artist)} • Prévia</div></div></div><button class="btn primary" data-search-add="${i}">Adicionar</button></div>`).join("");target.querySelectorAll("[data-search-add]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchAdd)];await addMusicTrack(r);render();});}catch(error){const target=document.querySelector("#musicSearchResults");if(target)target.innerHTML='<div class="empty">⚠️ Não foi possível realizar a busca agora.</div>';}});
+ document.querySelector("#musicSearchForm")?.addEventListener("submit",async e=>{e.preventDefault();const q=String(new FormData(e.target).get("query")||"").trim();if(q.length<2)return toast("Digite pelo menos 2 caracteres");const box=document.querySelector("#musicSearchResults");if(box)box.innerHTML='<div class="empty">🔎 Buscando…</div>';try{const results=await searchMusicArtist(q);const target=document.querySelector("#musicSearchResults");if(!target)return;if(!results.length){target.innerHTML='<div class="empty">Nenhuma prévia encontrada para essa busca.</div>';return;}target.innerHTML=results.map((r,i)=>`<div class="list-item"><div class="music-track-main">${r.cover?`<img src="${esc(r.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(r.title)}</b><div class="muted">${esc(r.artist)} • Prévia oficial</div></div></div><div class="actions"><button class="btn" data-search-preview="${i}">▶ Ouvir prévia</button><button class="btn primary" data-search-add="${i}">Adicionar</button></div></div>`).join("");target.querySelectorAll("[data-search-preview]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchPreview)];musicPreviewTrack=r;ensureMusicAudio();if(youtubePlayer){try{youtubePlayer.pauseVideo();}catch(e){}}musicAudio.src=r.url;musicAudio.load();try{await musicAudio.play();}catch(e){toast("Toque novamente para ouvir a prévia");}updateMusicUI();updateMediaSession();});target.querySelectorAll("[data-search-add]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchAdd)];musicPreviewTrack=null;await addMusicTrack(r);render();});}catch(error){const target=document.querySelector("#musicSearchResults");if(target)target.innerHTML='<div class="empty">⚠️ Não foi possível realizar a busca agora.</div>';}});
  document.querySelectorAll("[data-music-playlist]").forEach(b=>b.onclick=async()=>{const p=musicPlaylists.find(x=>String(x.id)===String(b.dataset.musicPlaylist));const ids=(p?.trackIds||[]).filter(id=>musicTracks.some(t=>String(t.id)===String(id)));if(!ids.length)return toast("Essa playlist ainda está vazia");await playMusicTrack(musicTracks.find(t=>String(t.id)===String(ids[0])),ids,0);});
 }
-function render(){if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}app.innerHTML=layout();bind()}
+function cleanupYouTubePlayer(){if(youtubePlayer){try{youtubePlayer.pauseVideo?.();youtubePlayer.destroy?.();}catch(e){} youtubePlayer=null;}}
+function render(){if(youtubePlayer)cleanupYouTubePlayer();if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}app.innerHTML=layout();bind()}
 window.addEventListener("beforeinstallprompt", e=>{
  e.preventDefault();
  deferredInstallPrompt=e;
