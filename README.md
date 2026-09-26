@@ -38,3 +38,9 @@ A configuração de confirmação de e-mail do Supabase pode exigir que você co
 - PWA
 - Tema claro/escuro
 - Instalação pelo navegador
+
+
+## V1.6.1 — Correção Supabase Cloud
+- SDK Supabase JS fixado em 2.117.2.
+- Mantida a Publishable Key no navegador.
+- Corrigida a camada de conexão para evitar incompatibilidade com versões antigas do SDK/CDN.
