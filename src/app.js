@@ -1,17 +1,17 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.7.5";
+const APP_VERSION = "1.8.0";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.7.5", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.8.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
 let cloudStatus = "offline";
 let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 let db;
 let currentView = "home";
 let theme = localStorage.getItem("zyn-theme") || "light";
@@ -21,6 +21,7 @@ let earnings = [];
 let gymProfile = null, gymPlans = [], gymSessions = [];
 let foodProfile = null, mealPlans = [], shoppingItems = [];
 let financeProfile = null, financeAccounts = [], financeTransactions = [], financeBills = [], financeGoals = [];
+let investmentAssets = [];
 let deferredInstallPrompt = null;
 let musicTracks = [], musicPlaylists = [], musicSettings = null;
 let musicAudio = null, musicCurrentTrackId = null, musicQueue = [], musicQueueIndex = -1, musicSearchBusy = false;
@@ -262,7 +263,7 @@ function openDB(){
     const request=indexedDB.open(DB_NAME,DB_VERSION);
     request.onupgradeneeded=()=>{
       const database=request.result;
-      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","musicTracks","musicPlaylists","musicSettings","syncQueue","syncMeta"].forEach(store=>{
+      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","investmentAssets","musicTracks","musicPlaylists","musicSettings","syncQueue","syncMeta"].forEach(store=>{
         if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
       });
     };
@@ -425,7 +426,7 @@ function moreMenu(){
  const el=modal(`<div class="section-title"><div><h3>☰ Mais</h3><div class="muted">Outras áreas do Zyn</div></div><button class="btn" id="closeMore">Fechar</button></div><div class="more-grid">
  <button class="more-item" data-more-view="planning">${uiIcon("plan")}<b>Planejamento</b><span>Lembretes + Metas</span></button>
  <button class="more-item" data-more-view="wellness">${uiIcon("well")}<b>Bem-estar</b><span>GYM + Dietas + Hábitos</span></button>
- <button class="more-item" data-more-view="finance">${uiIcon("finance")}<b>Finanças</b><span>Controle financeiro</span></button>
+ <button class="more-item" data-more-view="finance">${uiIcon("finance")}<b>Finanças</b><span>Controle financeiro</span></button>  <button class="more-item" data-more-view="investments">${uiIcon("finance")}<b>Investimentos</b><span>Carteira e patrimônio</span></button>
  <button class="more-item" data-more-view="music">${uiIcon("music")}<b>Música</b><span>Zyn Music</span></button>
  <button class="more-item" data-more-view="assistant">${uiIcon("assistant")}<b>Zyn Assistente</b><span>Seu assistente pessoal</span></button>
  </div>`);
@@ -446,8 +447,8 @@ function layout(){
   <button data-view="home" class="${currentView==="home"?"active":""}">${uiIcon("home")}<span>Início</span></button>
   <button data-view="planning" class="${["planning","reminders","goals"].includes(currentView)?"active":""}">${uiIcon("plan")}<span>Planejar</span></button>
   <button data-view="wellness" class="${["wellness","gym","gymWorkout","food","habits"].includes(currentView)?"active":""}">${uiIcon("well")}<span>Bem-estar</span></button>
-  <button data-view="finance" class="${currentView==="finance"?"active":""}">${uiIcon("finance")}<span>Finanças</span></button>
-  <button id="moreNav" class="${["music","assistant"].includes(currentView)?"active":""}">${uiIcon("more")}<span>Mais</span></button>
+  <button data-view="finance" class="${["finance","investments"].includes(currentView)?"active":""}">${uiIcon("finance")}<span>Finanças</span></button>
+  <button id="moreNav" class="${["music","assistant","investments"].includes(currentView)?"active":""}">${uiIcon("more")}<span>Mais</span></button>
  </div></nav>`;
 }
 
@@ -466,6 +467,7 @@ function homeView(){
   <button class="home-panel-card panel-plan" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><span class="panel-kicker">ORGANIZAÇÃO</span><h3>Planejamento</h3><p>Lembretes + Metas em um único painel.</p><div class="panel-stat"><b>${pending}</b><span>pendentes</span><i>${progress.toFixed(0)}% da meta</i></div></div><span class="panel-arrow">›</span></button>
   <button class="home-panel-card panel-well" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><span class="panel-kicker">ROTINA & SAÚDE</span><h3>Bem-estar</h3><p>GYM + Dietas + Hábitos no mesmo espaço.</p><div class="panel-stat"><b>${gymSessionsCount}</b><span>sessões/semana</span><i>${shoppingPending} itens de compras</i></div></div><span class="panel-arrow">›</span></button>
   <button class="home-panel-card panel-finance" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><span class="panel-kicker">CONTROLE</span><h3>Finanças</h3><p>Visão mensal do dinheiro que entra, sai e sobra.</p><div class="panel-stat"><b>${money(Math.max(0,finance.available))}</b><span>disponível</span><i>${money(finance.expense)} em despesas</i></div></div><span class="panel-arrow">›</span></button>
+  <button class="home-panel-card panel-investments" data-home-view="investments"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><span class="panel-kicker">PATRIMÔNIO</span><h3>Investimentos</h3><p>Carteira de ações, FIIs, ETFs e outros ativos.</p><div class="panel-stat"><b>${investmentSummary().count}</b><span>ativos</span><i>${money(investmentSummary().current)} em carteira</i></div></div><span class="panel-arrow">›</span></button>
   <button class="home-panel-card panel-music" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><span class="panel-kicker">ENTRETENIMENTO</span><h3>Zyn Music</h3><p>Suas playlists, links e reprodução.</p><div class="panel-stat"><b>${musicTracks.length}</b><span>faixas</span><i>${track?esc(track.title):"Nada tocando"}</i></div></div><span class="panel-arrow">›</span></button>
   <button class="home-panel-card panel-assistant" data-home-view="assistant"><span class="panel-icon">${uiIcon("assistant")}</span><div class="panel-copy"><span class="panel-kicker">INTELIGÊNCIA PESSOAL</span><h3>Zyn Assistente</h3><p>O centro para conversar e conectar seus painéis.</p><div class="panel-stat"><b>∞</b><span>possibilidades</span><i>Seu assistente pessoal</i></div></div><span class="panel-arrow">›</span></button>
  </section>
@@ -523,12 +525,73 @@ function financeCategoryTotals(key=monthKey()){
  financeTransactions.filter(x=>x.type==="expense" && String(x.date||"").slice(0,7)===key).forEach(x=>{out[x.category||"Outros"]=(out[x.category||"Outros"]||0)+Number(x.amount||0)});
  return Object.entries(out).sort((a,b)=>b[1]-a[1]);
 }
+
+function investmentSummary(){
+ const rows=investmentAssets||[];
+ const invested=rows.reduce((s,x)=>s+Number(x.quantity||0)*Number(x.avgPrice||0),0);
+ const current=rows.reduce((s,x)=>s+Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0),0);
+ const result=current-invested;
+ const returnPct=invested?result/invested*100:0;
+ const dividends=rows.reduce((s,x)=>s+Number(x.dividends||0),0);
+ return {invested,current,result,returnPct,dividends,count:rows.length};
+}
+function investmentTypeLabel(type){
+ return ({stock:"Ações",fii:"FIIs",etf:"ETFs",fixed:"Renda fixa",crypto:"Cripto",other:"Outros"})[type]||"Outros";
+}
+function investmentForm(existing={}){
+ const el=modal(`<div class="row"><div><span class="eyebrow">CARTEIRA</span><h2 style="margin:3px 0">${existing.id?"Editar ativo":"Novo investimento"}</h2></div><button class="btn" id="closeInvestment">×</button></div>
+ <form id="investmentForm" class="stack"><div class="form-grid">
+  <div class="field"><label>Ticker / código *</label><input name="ticker" required value="${esc(existing.ticker||"")} " placeholder="Ex.: PETR4"></div>
+  <div class="field"><label>Nome *</label><input name="name" required value="${esc(existing.name||"")} " placeholder="Ex.: Petrobras PN"></div>
+  <div class="field"><label>Tipo</label><select name="type">
+   ${["stock","fii","etf","fixed","crypto","other"].map(t=>`<option value="${t}" ${existing.type===t?"selected":""}>${investmentTypeLabel(t)}</option>`).join("")}
+  </select></div>
+  <div class="field"><label>Quantidade</label><input name="quantity" type="number" min="0" step="0.000001" value="${existing.quantity??0}"></div>
+  <div class="field"><label>Preço médio (R$)</label><input name="avgPrice" type="number" min="0" step="0.01" value="${existing.avgPrice??0}"></div>
+  <div class="field"><label>Preço atual (R$)</label><input name="currentPrice" type="number" min="0" step="0.01" value="${existing.currentPrice??existing.avgPrice??0}"></div>
+  <div class="field"><label>Proventos recebidos (R$)</label><input name="dividends" type="number" min="0" step="0.01" value="${existing.dividends??0}"></div>
+  <div class="field"><label>Instituição</label><input name="institution" value="${esc(existing.institution||"")} " placeholder="Ex.: XP, Inter, Nubank"></div>
+  <div class="field full"><label>Observação</label><textarea name="notes" rows="2" placeholder="Opcional">${esc(existing.notes||"")}</textarea></div>
+ </div><button class="btn primary" type="submit">${existing.id?"Salvar alterações":"Adicionar à carteira"}</button></form>`);
+ el.querySelector("#closeInvestment").onclick=()=>closeModal(el);
+ el.querySelector("#investmentForm").onsubmit=async e=>{
+  e.preventDefault(); const f=new FormData(e.target);
+  const data={...(existing.id?existing:{}),ticker:String(f.get("ticker")||"").trim().toUpperCase(),name:String(f.get("name")||"").trim(),
+   type:f.get("type"),quantity:Number(f.get("quantity")||0),avgPrice:Number(f.get("avgPrice")||0),currentPrice:Number(f.get("currentPrice")||0),
+   dividends:Number(f.get("dividends")||0),institution:String(f.get("institution")||"").trim(),notes:String(f.get("notes")||"").trim()};
+  await put("investmentAssets",data); closeModal(el); await loadData(); render(); toast(existing.id?"Investimento atualizado":"Investimento adicionado");
+ };
+}
+function investmentsView(){
+ const s=investmentSummary();
+ const allocation={}; investmentAssets.forEach(x=>{const v=Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0); const k=investmentTypeLabel(x.type); allocation[k]=(allocation[k]||0)+v;});
+ const alloc=Object.entries(allocation).sort((a,b)=>b[1]-a[1]);
+ return `<div class="section-title"><div><span class="eyebrow">FINANÇAS • INVESTIMENTOS</span><h2>Carteira de investimentos</h2><div class="muted">Acompanhe ações, FIIs, ETFs e outros ativos em um único painel.</div></div><div class="actions"><button class="btn" id="backFinance">← Finanças</button><button class="btn primary" id="investmentAdd">+ Investimento</button></div></div>
+ <section class="investment-hero"><div><span class="eyebrow">PATRIMÔNIO INVESTIDO</span><div class="investment-total">${money(s.current)}</div><div class="muted">Valor atual estimado da carteira</div></div><div class="investment-hero-side"><span class="tag ${s.result>=0?"success":"danger"}">${s.result>=0?"▲":"▼"} ${money(Math.abs(s.result))} (${s.returnPct.toFixed(1)}%)</span><div class="muted">resultado sobre o custo</div></div></section>
+ <div class="investment-metrics">
+  <section class="card"><div class="muted">Capital aplicado</div><div class="metric">${money(s.invested)}</div></section>
+  <section class="card"><div class="muted">Valor atual</div><div class="metric">${money(s.current)}</div></section>
+  <section class="card"><div class="muted">Proventos</div><div class="metric">${money(s.dividends)}</div></section>
+  <section class="card"><div class="muted">Ativos</div><div class="metric">${s.count}</div></section>
+ </div>
+ <div class="investment-columns">
+  <section class="card"><div class="row"><div><span class="eyebrow">CARTEIRA</span><h3>Meus ativos</h3></div><span class="tag">${s.count} ${s.count===1?"ativo":"ativos"}</span></div>
+   ${investmentAssets.length?`<div class="investment-list">${investmentAssets.map(x=>{const cost=Number(x.quantity||0)*Number(x.avgPrice||0),cur=Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0),r=cur-cost;return `<div class="investment-row"><div class="investment-symbol">${esc(x.ticker||"?")}</div><div class="investment-main"><b>${esc(x.name||"Sem nome")}</b><span>${investmentTypeLabel(x.type)} • ${Number(x.quantity||0).toLocaleString("pt-BR")} cotas</span></div><div class="investment-value"><b>${money(cur)}</b><span class="${r>=0?"positive":"negative"}">${r>=0?"+":""}${money(r)}</span></div><div class="investment-actions"><button class="btn" data-invest-edit="${x.id}">Editar</button><button class="btn danger" data-invest-delete="${x.id}">Excluir</button></div></div>`}).join("")}</div>`:`<div class="investment-empty"><div class="investment-empty-icon">◈</div><h3>Sua carteira começa aqui</h3><p>Cadastre seu primeiro ativo para acompanhar patrimônio, resultado e distribuição.</p><button class="btn primary" id="investmentEmptyAdd">Adicionar investimento</button></div>`}
+  </section>
+  <section class="card"><div class="row"><div><span class="eyebrow">DISTRIBUIÇÃO</span><h3>Alocação da carteira</h3></div></div>
+   ${alloc.length?`<div class="allocation-list">${alloc.map(([k,v])=>{const pct=s.current?v/s.current*100:0;return `<div class="allocation-item"><div class="row"><b>${esc(k)}</b><span>${pct.toFixed(0)}%</span></div><div class="progress"><div style="width:${Math.min(100,pct)}%"></div></div><div class="muted">${money(v)}</div></div>`}).join("")}</div>`:`<div class="empty">Cadastre ativos para visualizar a distribuição.</div>`}
+  </section>
+ </div>
+ <section class="card full investment-note"><div class="row"><div><span class="eyebrow">ATENÇÃO</span><h3>Preços são informados por você</h3><div class="muted">O Zyn não consulta cotação em tempo real nesta versão. Atualize o preço atual quando quiser para manter o painel fiel à sua carteira.</div></div><span class="tag">Controle pessoal</span></div></section>`;
+}
+
 function financeView(){
  const key=financeProfile?.selectedMonth||monthKey(), d=financeMonthData(key), cats=financeCategoryTotals(key);
  const plannedIncome=Number(financeProfile?.monthlyIncome||0);
  const fixed=financeBills.filter(x=>x.active!==false).reduce((a,x)=>a+Number(x.amount||0),0);
  const limit=Math.max(0,(plannedIncome||d.income)-fixed-(financeProfile?.monthlySavingsTarget||0));
  return `<div class="section-title"><h2>💰 Finanças</h2><div class="actions"><button class="btn" id="financeProfileBtn">⚙️ Planejamento</button><button class="btn primary" id="financeAdd">+ Lançamento</button></div></div>
+ <section class="finance-investment-banner"><div class="finance-investment-icon">${uiIcon("finance")}</div><div><span class="eyebrow">PATRIMÔNIO</span><h3>Investimentos</h3><p>Carteira de ações, FIIs, ETFs e outros ativos.</p></div><button class="btn primary" id="openInvestments">Abrir carteira</button></section>
  <section class="hero"><div class="eyebrow" style="color:#e8e2ff">CONTROLE FINANCEIRO</div><h2>Faça o dinheiro sobrar.</h2><p>O Zyn separa o que entrou, o que já está comprometido e o que ainda pode ser gasto.</p></section>
  <section class="card full"><div class="row"><div><div class="eyebrow">MÊS</div><h3 style="text-transform:capitalize">${esc(financeMonthLabel(key))}</h3></div><input id="financeMonth" type="month" value="${key}" style="max-width:170px"></div></section>
  <div class="grid">
@@ -631,7 +694,7 @@ function authForm(){
  el.querySelector("#authForm")?.addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);const email=String(f.get("email")||"").trim();const password=String(f.get("password")||"");const action=e.submitter?.value||"login";try{if(action==="signup")await signUp(email,password);else await signIn(email,password);closeModal(el);render();}catch(err){toast("❌ "+(err?.message||"Não foi possível autenticar"));}});
 }
 async function readLocalRecords(){
- const stores=["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","musicTracks","musicPlaylists","musicSettings"];
+ const stores=["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","investmentAssets","musicTracks","musicPlaylists","musicSettings"];
  const out=[];for(const name of stores){const rows=await all(name);for(const row of rows){if(row?.id!==undefined&&row?.id!==null){const stamp=row.updatedAt||new Date().toISOString();out.push({storeName:name,recordId:String(row.id),payload:row.updatedAt?row:{...row,updatedAt:stamp},updatedAt:stamp});}}}return out;
 }
 async function applyCloudRecord(row){
@@ -667,7 +730,7 @@ async function syncAll(reason="auto"){
 function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll("auto"),1200);}
 function bindCloudEvents(){supabase.auth.onAuthStateChange((event,session)=>{authSession=session||null;if(session){scheduleSync();}else{setCloudStatus("offline","Entre na conta para sincronizar");}render();});window.addEventListener("online",()=>syncAll("online"));window.addEventListener("offline",()=>setCloudStatus("offline","Sem internet — alterações ficam no aparelho"));}
 
-async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");musicTracks=await all("musicTracks");musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
+async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");investmentAssets=await all("investmentAssets");musicTracks=await all("musicTracks");musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
 }
 function bind(){
  document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
@@ -698,6 +761,7 @@ function bind(){
  if(currentView==="gymWorkout")content.innerHTML=gymWorkout();
  if(currentView==="food")content.innerHTML=foodView();
  if(currentView==="finance")content.innerHTML=financeView();
+ if(currentView==="investments")content.innerHTML=investmentsView();
  if(currentView==="habits")content.innerHTML=habitsView();
  if(currentView==="music")content.innerHTML=musicView();
  if(currentView==="assistant")content.innerHTML=assistantView();
@@ -720,6 +784,12 @@ function bind(){
  document.querySelector("#finishGym")?.addEventListener("click",async()=>{const p=gymToday(), ex=GYM_EX[p.workout]||[];const records=ex.map((x,i)=>({exercise:x[0],load:Number(document.querySelector(`[data-load="${i}"]`)?.value||0),reps:Number(document.querySelector(`[data-reps="${i}"]`)?.value||0)}));await put("gymSessions",{date:todayISO(),type:"Treino de academia",workout:p.workout,records});await loadData();toast("Treino salvo");currentView="gym";render()});
  document.querySelectorAll("[data-done]").forEach(b=>b.onclick=()=>{b.textContent="✓ Concluído";b.classList.add("primary")});
  document.querySelector("#financeProfileBtn")?.addEventListener("click",financeProfileForm);
+ document.querySelector("#openInvestments")?.addEventListener("click",()=>setView("investments"));
+ document.querySelector("#backFinance")?.addEventListener("click",()=>setView("finance"));
+ document.querySelector("#investmentAdd")?.addEventListener("click",()=>investmentForm());
+ document.querySelector("#investmentEmptyAdd")?.addEventListener("click",()=>investmentForm());
+ document.querySelectorAll("[data-invest-edit]").forEach(b=>b.onclick=()=>investmentForm(investmentAssets.find(x=>String(x.id)===String(b.dataset.investEdit))));
+ document.querySelectorAll("[data-invest-delete]").forEach(b=>b.onclick=async()=>{if(confirm("Excluir este investimento da carteira?")){await remove("investmentAssets",Number(b.dataset.investDelete));await loadData();render();toast("Investimento excluído")}});
  document.querySelector("#financeAdd")?.addEventListener("click",financeTransactionForm);
  document.querySelector("#financeBill")?.addEventListener("click",financeBillForm);
  document.querySelector("#financeMonth")?.addEventListener("change",async e=>{financeProfile={...(financeProfile||{id:1}),selectedMonth:e.target.value};await put("financeProfile",financeProfile);await loadData();render()});
