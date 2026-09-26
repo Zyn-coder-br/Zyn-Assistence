@@ -1,14 +1,13 @@
-# Zyn Assistente — V1.5.3 Identidade Visual
+# Zyn Assistente — V1.5.4
 
-## Identidade oficial
-- Logo roxo fosco aprovada para o Zyn Assistente.
-- Ícone PWA 192x192.
-- Ícone PWA 512x512.
-- Ícone adaptável/maskable 512x512.
-- Manifesto atualizado para a nova identidade.
-- Tema roxo fosco mantido no PWA.
-- Cache do Service Worker atualizado.
-- Funcionalidades da V1.5.2 preservadas.
+## Correção dos ícones PWA
+- Removida a arte de apresentação usada indevidamente como ícone.
+- Ícone 192x192 recriado a partir da logo limpa.
+- Ícone 512x512 recriado a partir da logo limpa.
+- Ícone maskable 512x512 recriado com área segura para o recorte do Android.
+- Manifesto e Service Worker atualizados.
+- Identidade roxo fosco preservada.
+- Todo o restante da V1.5.3 preservado.
 
-## Próximo grande passo
-V1.6 — Zyn Cloud: autenticação + Supabase + sincronização entre celular e computador, mantendo IndexedDB para uso offline.
+## Próximo passo
+Testar a instalação no Android. Se o atalho antigo continuar aparecendo, remover o ícone instalado anteriormente e instalar o Zyn novamente para atualizar o cache do launcher.
