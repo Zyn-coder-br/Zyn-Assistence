@@ -1,13 +1,16 @@
-# Zyn Assistente — V1.5.4
+# Zyn Assistente — V1.5.5
 
-## Correção dos ícones PWA
-- Removida a arte de apresentação usada indevidamente como ícone.
-- Ícone 192x192 recriado a partir da logo limpa.
-- Ícone 512x512 recriado a partir da logo limpa.
-- Ícone maskable 512x512 recriado com área segura para o recorte do Android.
-- Manifesto e Service Worker atualizados.
-- Identidade roxo fosco preservada.
-- Todo o restante da V1.5.3 preservado.
+## Correção definitiva dos ícones e tela de abertura
+- Criados novos nomes de arquivo para evitar cache do Android/PWA.
+- Logo limpa, sem texto de apresentação.
+- 192x192 real.
+- 512x512 real.
+- Maskable 512x512 com área segura para Android.
+- Manifesto aponta somente para os novos arquivos.
+- Favicon e Apple Touch Icon atualizados.
+- Service Worker atualizado.
+- Nenhuma referência aos ícones antigos permanece no manifesto, HTML ou cache.
+- Funcionalidades anteriores preservadas.
 
-## Próximo passo
-Testar a instalação no Android. Se o atalho antigo continuar aparecendo, remover o ícone instalado anteriormente e instalar o Zyn novamente para atualizar o cache do launcher.
+## Após publicar
+Como esta versão usa novos nomes de arquivos, ela força a atualização dos recursos visuais. Se o aplicativo antigo continuar instalado, desinstale o atalho/aplicativo Zyn antigo e instale novamente a partir do site atualizado.
