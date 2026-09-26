@@ -1,29 +1,15 @@
-# Assistente Zyn — V1.5.1 Finanças
+# Assistente Zyn — V1.5.2 PWA
 
-## Objetivo
-Transformar o módulo de Finanças em um painel prático para entender o dinheiro do mês e aumentar a chance de sobrar dinheiro.
+## Correção / melhoria
+- PWA com ícones 192x192, 512x512 e maskable.
+- Manifesto com `display: standalone`, `scope`, `id` e `start_url`.
+- Ícone do Zyn para tela inicial.
+- Botão de instalação aparece quando o navegador/dispositivo disponibiliza o fluxo de instalação.
+- Service Worker atualizado e cache dos ícones incluído.
+- V1.5.1 Finanças preservada.
 
-## Correção V1.5.1
-- Corrigido erro no filtro de transações que deixava a tela de Finanças vazia.
-- Banco de dados e funcionalidades da V1.5.0 preservados.
+## Instalação no Android
+Abra o endereço do Zyn em um navegador compatível e use o botão/fluxo de instalar. Depois da instalação, abra o Zyn pelo ícone da tela inicial. O modo `standalone` remove a barra de endereço do navegador e apresenta o Zyn como aplicativo.
 
-## Novidades
-- Planejamento financeiro mensal
-- Renda fixa mensal
-- Meta mensal para guardar dinheiro
-- Lançamentos de entrada, despesa e dinheiro guardado
-- Categorias de gastos
-- Contas fixas com vencimento
-- Resumo mensal
-- Valor disponível estimado
-- Limite sugerido para gastos variáveis
-- Visão dos maiores grupos de despesas
-- Seleção de mês
-- Preservação de Metas/Lembretes/GYM/Comida
-- IndexedDB local, sem Supabase e sem Node.js
-
-## Como publicar
-Substitua os arquivos do repositório pelos arquivos desta pasta e mantenha o GitHub Pages apontando para a raiz.
-
-## Observação
-Esta versão é uma ferramenta de organização financeira pessoal e não substitui aconselhamento financeiro profissional.
+## Próxima etapa
+Sincronização entre dispositivos com Supabase + autenticação, mantendo IndexedDB como camada local/offline.

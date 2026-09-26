@@ -1,10 +1,13 @@
-const CACHE_NAME = "assistente-zyn-v1.5.1";
+const CACHE_NAME = "assistente-zyn-v1.5.2";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./src/app.js",
-  "./src/styles.css"
+  "./src/styles.css",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-maskable.png"
 ];
 
 self.addEventListener("install", event => {

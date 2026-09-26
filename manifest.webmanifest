@@ -1,10 +1,36 @@
 {
+  "id": "./",
   "name": "Assistente Zyn",
   "short_name": "Zyn",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f7f5ff",
+  "background_color": "#171522",
   "theme_color": "#7465c9",
-  "description": "Assistente pessoal com lembretes e metas locais.",
-  "icons": []
+  "description": "Assistente pessoal para organizar rotina, metas, finanças, GYM e alimentação.",
+  "categories": [
+    "productivity",
+    "lifestyle",
+    "finance"
+  ],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
