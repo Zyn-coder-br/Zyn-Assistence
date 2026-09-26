@@ -1,17 +1,17 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.6.2";
+const APP_VERSION = "1.7.0";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.6.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.7.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
 let cloudStatus = "offline";
 let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 let db;
 let currentView = "home";
 let theme = localStorage.getItem("zyn-theme") || "light";
@@ -22,6 +22,102 @@ let gymProfile = null, gymPlans = [], gymSessions = [];
 let foodProfile = null, mealPlans = [], shoppingItems = [];
 let financeProfile = null, financeAccounts = [], financeTransactions = [], financeBills = [], financeGoals = [];
 let deferredInstallPrompt = null;
+let musicTracks = [], musicPlaylists = [], musicSettings = null;
+let musicAudio = null, musicCurrentTrackId = null, musicQueue = [], musicQueueIndex = -1, musicSearchBusy = false;
+
+function ensureMusicAudio(){
+  if(musicAudio) return musicAudio;
+  musicAudio = document.createElement("audio");
+  musicAudio.preload = "metadata";
+  musicAudio.playsInline = true;
+  musicAudio.setAttribute("aria-hidden","true");
+  Object.assign(musicAudio.style,{position:"fixed",width:"1px",height:"1px",opacity:"0",pointerEvents:"none",left:"-10px",bottom:"-10px"});
+  document.body.appendChild(musicAudio);
+  musicAudio.addEventListener("timeupdate",()=>{
+    const t=document.querySelector("#musicProgress");
+    const current=document.querySelector("#musicCurrentTime");
+    const duration=document.querySelector("#musicDuration");
+    if(t && Number.isFinite(musicAudio.duration) && musicAudio.duration>0) t.value=String((musicAudio.currentTime/musicAudio.duration)*100);
+    if(current) current.textContent=musicTime(musicAudio.currentTime);
+    if(duration) duration.textContent=musicTime(musicAudio.duration);
+  });
+  musicAudio.addEventListener("play",()=>{updateMusicUI();updateMediaSession();});
+  musicAudio.addEventListener("pause",()=>{updateMusicUI();updateMediaSession();});
+  musicAudio.addEventListener("ended",()=>playNextMusic(1));
+  return musicAudio;
+}
+function musicTime(seconds){if(!Number.isFinite(seconds)||seconds<0)return "0:00";const m=Math.floor(seconds/60),s=Math.floor(seconds%60);return `${m}:${String(s).padStart(2,"0")}`;}
+function currentMusicTrack(){return musicTracks.find(t=>String(t.id)===String(musicCurrentTrackId))||null;}
+function musicQueueTracks(){return musicQueue.map(id=>musicTracks.find(t=>String(t.id)===String(id))).filter(Boolean);}
+function updateMediaSession(){
+  if(!("mediaSession" in navigator)) return;
+  const track=currentMusicTrack();
+  if(!track){navigator.mediaSession.metadata=null;return;}
+  try{navigator.mediaSession.metadata=new MediaMetadata({title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"Zyn Music",artwork:track.cover?[{src:track.cover,sizes:"512x512",type:"image/jpeg"}]:[]});}catch(e){}
+  try{navigator.mediaSession.playbackState=musicAudio?.paused?"paused":"playing";}catch(e){}
+}
+function setupMediaSession(){
+  if(!("mediaSession" in navigator)) return;
+  const actions={play:()=>musicAudio?.play(),pause:()=>musicAudio?.pause(),previoustrack:()=>playNextMusic(-1),nexttrack:()=>playNextMusic(1),seekbackward:()=>{if(musicAudio)musicAudio.currentTime=Math.max(0,musicAudio.currentTime-10)},seekforward:()=>{if(musicAudio)musicAudio.currentTime=Math.min(musicAudio.duration||0,musicAudio.currentTime+10)},seekto:(d)=>{if(musicAudio&&Number.isFinite(d.seekTime))musicAudio.currentTime=d.seekTime}};
+  for(const [name,fn] of Object.entries(actions)){try{navigator.mediaSession.setActionHandler(name,fn)}catch(e){}}
+}
+async function playMusicTrack(track,queueIds=null,index=null){
+  ensureMusicAudio();
+  if(!track?.url){toast("⚠️ Esta música não tem uma URL de áudio válida");return;}
+  if(queueIds){musicQueue=[...queueIds];musicQueueIndex=Math.max(0,index??musicQueue.findIndex(id=>String(id)===String(track.id)));}
+  else if(!musicQueue.length){musicQueue=[track.id];musicQueueIndex=0;}
+  musicCurrentTrackId=track.id;
+  musicAudio.src=track.url;
+  musicAudio.load();
+  updateMediaSession();
+  try{await musicAudio.play();}catch(error){toast("▶️ Toque em play novamente para iniciar a música");}
+  musicSettings={...(musicSettings||{id:1}),currentTrackId:track.id,queue:musicQueue,queueIndex:musicQueueIndex};
+  await put("musicSettings",musicSettings);
+  render();
+}
+async function playNextMusic(direction=1){
+  const ids=musicQueue.length?musicQueue:musicTracks.map(t=>t.id);
+  if(!ids.length)return;
+  let idx=musicQueue.length?musicQueueIndex:ids.findIndex(id=>String(id)===String(musicCurrentTrackId));
+  if(idx<0)idx=0;
+  idx+=direction;
+  if(idx>=ids.length)idx=0;
+  if(idx<0)idx=ids.length-1;
+  const track=musicTracks.find(t=>String(t.id)===String(ids[idx]));
+  if(!track)return;
+  musicQueue=ids;musicQueueIndex=idx;
+  await playMusicTrack(track,ids,idx);
+}
+async function toggleMusicPlay(){ensureMusicAudio();if(!musicAudio.src){const track=currentMusicTrack()||musicTracks[0];if(track)return playMusicTrack(track);toast("Adicione uma música primeiro");return;}if(musicAudio.paused){try{await musicAudio.play()}catch(e){toast("Toque no play novamente para iniciar");}}else musicAudio.pause();updateMusicUI();updateMediaSession();}
+async function addMusicTrack(track,playlistId=null){
+  const payload={title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"",cover:track.cover||"",url:track.url||track.previewUrl||"",source:track.source||"direct",duration:track.duration||0,createdAt:new Date().toISOString()};
+  if(!payload.url){toast("Informe uma URL de áudio");return;}
+  await put("musicTracks",payload);
+  await loadData();
+  const added=musicTracks.slice().sort((a,b)=>Number(b.id)-Number(a.id))[0];
+  if(playlistId){const pl=musicPlaylists.find(p=>String(p.id)===String(playlistId));if(pl){pl.trackIds=[...(pl.trackIds||[]),added.id];await put("musicPlaylists",pl);await loadData();}}
+  toast("🎵 Música adicionada");
+}
+async function createMusicPlaylist(name){const clean=String(name||"").trim();if(!clean)return;await put("musicPlaylists",{name:clean,trackIds:[],createdAt:new Date().toISOString()});await loadData();render();toast("🎼 Playlist criada");}
+function updateMusicUI(){const track=currentMusicTrack(), title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn");if(title)title.textContent=track?.title||"Nenhuma música selecionada";if(artist)artist.textContent=track?.artist||"Escolha uma música ou adicione um link";if(cover){cover.src=track?.cover||"";cover.style.display=track?.cover?"block":"none";}if(play)play.textContent=musicAudio&&!musicAudio.paused?"⏸️":"▶️";const status=document.querySelector("#musicStatus");if(status)status.textContent=musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado";}
+function musicView(){
+  const track=currentMusicTrack();
+  const playlists=musicPlaylists;
+  return `<div class="section-title"><div><h2>🎧 Zyn Music</h2><div class="muted">Seu player pessoal, com suporte a controles de mídia do Android.</div></div><div class="actions"><button class="btn" id="musicPlaylistNew">+ Playlist</button><button class="btn primary" id="musicAddLink">+ Link</button></div></div>
+  <section class="music-player card full"><div class="music-now">${track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa" />`:`<div class="music-cover-placeholder" id="musicNowCover">🎧</div>`}<div class="music-meta"><div class="eyebrow">TOCANDO AGORA</div><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música selecionada")}</h2><div class="muted" id="musicNowArtist">${esc(track?.artist||"Escolha uma música ou adicione um link")}</div><div class="tag" id="musicStatus">${musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado"}</div></div></div>
+  <input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Progresso da música"/><div class="music-times"><span id="musicCurrentTime">0:00</span><span id="musicDuration">0:00</span></div><div class="music-controls"><button class="music-control" id="musicPrev" title="Anterior">⏮️</button><button class="music-control music-play" id="musicPlayBtn" title="Play/Pause">${musicAudio&&!musicAudio.paused?"⏸️":"▶️"}</button><button class="music-control" id="musicNext" title="Próxima">⏭️</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><label class="music-volume">🔊 <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="${musicAudio?musicAudio.volume:1}"/></label></div></section>
+  <section class="card full"><div class="row"><h3>🔎 Buscar artista / banda</h3><span class="tag">prévia oficial</span></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">A busca encontra prévias disponíveis para reprodução. Para músicas completas, use um link direto de áudio autorizado.</div></div></section>
+  <section class="card full"><div class="row"><h3>🎼 Minhas playlists</h3><span class="tag">${playlists.length}</span></div><div class="music-playlists">${playlists.map(p=>`<button class="music-playlist" data-music-playlist="${p.id}"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></button>`).join("")||`<div class="empty">Crie sua primeira playlist.</div>`}</div></section>
+  <section class="card full"><div class="row"><h3>🎵 Biblioteca</h3><span class="tag">${musicTracks.length} faixa(s)</span></div><div class="stack">${musicTracks.slice().reverse().map(t=>`<div class="list-item music-track-item"><div class="music-track-main">${t.cover?`<img src="${esc(t.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(t.title)}</b><div class="muted">${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":""}</div></div></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||`<div class="empty">Nenhuma música ainda. Adicione um link direto ou busque um artista.</div>`}</div></section>`;
+}
+async function musicLinkForm(){
+ const el=modal(`<div class="section-title"><h3>🔗 Adicionar música por link</h3><button class="btn" id="close">Fechar</button></div><form id="musicLinkForm" class="form-grid"><div class="field full"><label>URL direta do áudio</label><input name="url" type="url" placeholder="https://.../musica.mp3" required /></div><div class="field"><label>Nome da música</label><input name="title" required /></div><div class="field"><label>Artista</label><input name="artist" /></div><div class="field"><label>Álbum</label><input name="album" /></div><div class="field"><label>Capa (URL opcional)</label><input name="cover" type="url" /></div><div class="field full"><label>Playlist</label><select name="playlist"><option value="">Sem playlist</option>${musicPlaylists.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div><div class="actions field full"><button class="btn primary" type="submit">Adicionar</button></div></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#musicLinkForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await addMusicTrack({url:String(f.get("url")||"").trim(),title:f.get("title"),artist:f.get("artist"),album:f.get("album"),cover:f.get("cover"),source:"direct"},f.get("playlist")||null);closeModal(el);render();};
+}
+async function searchMusicArtist(query){
+ musicSearchBusy=true;render();
+ try{const url=`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&attribute=artistTerm&limit=20`;const response=await fetch(url);if(!response.ok)throw new Error("Busca indisponível");const json=await response.json();return (json.results||[]).filter(x=>x.previewUrl).map(x=>({title:x.trackName,artist:x.artistName,album:x.collectionName,cover:x.artworkUrl100?.replace("100x100bb","600x600bb")||"",url:x.previewUrl,source:"itunes-preview",duration:x.trackTimeMillis||0}));}finally{musicSearchBusy=false;}
+}
 
 document.body.className = theme;
 const app = document.querySelector("#app");
@@ -31,7 +127,7 @@ function openDB(){
     const request=indexedDB.open(DB_NAME,DB_VERSION);
     request.onupgradeneeded=()=>{
       const database=request.result;
-      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","syncQueue","syncMeta"].forEach(store=>{
+      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","musicTracks","musicPlaylists","musicSettings","syncQueue","syncMeta"].forEach(store=>{
         if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
       });
     };
@@ -183,6 +279,7 @@ function layout(){
   <button data-view="food" class="${currentView==="food"?"active":""}">🍽️<br>Comida</button>
   <button data-view="finance" class="${currentView==="finance"?"active":""}">R$<br>Finanças</button>
   <button data-view="habits" class="${currentView==="habits"?"active":""}">✦<br>Hábitos</button>
+  <button data-view="music" class="${currentView==="music"?"active":""}">🎧<br>Música</button>
  </div></nav>`;
 }
 
@@ -199,6 +296,7 @@ function homeView(){
   </section>
   <section class="card"><div class="row"><h3>🔔 Lembretes</h3><span class="tag">${reminders.filter(r=>!r.done).length} pendentes</span></div>${pending.length?`<div class="stack">${pending.map(r=>`<div class="list-item"><div><b>${esc(r.title)}</b><div class="muted">${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div></div><span class="tag warning">Pendente</span></div>`).join("")}</div>`:`<div class="empty">Nenhum lembrete pendente.</div>`}<button class="btn" id="homeReminders" style="margin-top:12px">Abrir lembretes</button></section>
   <section class="card"><h3>📊 Resumo rápido</h3><div class="stack"><div class="row"><span class="muted">Ganhos nesta semana</span><b>${money(earnings.filter(e=>getCurrentWeekDays().includes(e.date)).reduce((s,e)=>s+Number(e.amount||0),0))}</b></div><div class="row"><span class="muted">Metas cadastradas</span><b>${goals.length}</b></div><div class="row"><span class="muted">Lembretes concluídos</span><b>${reminders.filter(r=>r.done).length}</b></div></div></section>
+  <section class="card full music-home-card"><div class="row"><div><div class="eyebrow">🎧 ZYN MUSIC</div><h3>${esc(currentMusicTrack()?.title||"Sua música")}</h3><div class="muted">${esc(currentMusicTrack()?.artist||"Player pessoal")}</div></div><button class="btn primary" id="homeMusic">Abrir player</button></div></section>
  </div>`;
 }
 
@@ -373,7 +471,7 @@ async function syncAll(reason="auto"){
 function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll("auto"),1200);}
 function bindCloudEvents(){supabase.auth.onAuthStateChange((event,session)=>{authSession=session||null;if(session){scheduleSync();}else{setCloudStatus("offline","Entre na conta para sincronizar");}render();});window.addEventListener("online",()=>syncAll("online"));window.addEventListener("offline",()=>setCloudStatus("offline","Sem internet — alterações ficam no aparelho"));}
 
-async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals")}
+async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");musicTracks=await all("musicTracks");musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
 function bind(){
  document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
    if(!deferredInstallPrompt) return;
@@ -397,6 +495,7 @@ function bind(){
  if(currentView==="food")content.innerHTML=foodView();
  if(currentView==="finance")content.innerHTML=financeView();
  if(currentView==="habits")content.innerHTML=habitsView();
+ if(currentView==="music")content.innerHTML=musicView();
  document.querySelector("#newReminder")?.addEventListener("click",()=>reminderForm());
  document.querySelector("#newGoal")?.addEventListener("click",()=>goalForm());
  document.querySelector("#createGoal")?.addEventListener("click",()=>goalForm({target:700,dailyTarget:100,name:"Meta Uber e Entregas",source:"all"}));
@@ -424,6 +523,19 @@ function bind(){
  document.querySelector("#newShopping")?.addEventListener("click",shoppingForm);
  document.querySelectorAll("[data-shop]").forEach(b=>b.onclick=async()=>{const x=shoppingItems.find(x=>x.id===Number(b.dataset.shop));if(x){x.done=!x.done;await put("shoppingItems",x);await loadData();render()}});
  document.querySelectorAll("[data-reminder-done]").forEach(b=>b.onclick=async()=>{const r=reminders.find(r=>r.id===Number(b.dataset.reminderDone));if(r){r.done=!r.done;await put("reminders",r);await loadData();render()}});
+ document.querySelector("#homeMusic")?.addEventListener("click",()=>setView("music"));
+ document.querySelector("#musicAddLink")?.addEventListener("click",musicLinkForm);
+ document.querySelector("#musicPlaylistNew")?.addEventListener("click",async()=>{const name=prompt("Nome da playlist:");if(name)await createMusicPlaylist(name);});
+ document.querySelector("#musicPlayBtn")?.addEventListener("click",toggleMusicPlay);
+ document.querySelector("#musicPrev")?.addEventListener("click",()=>playNextMusic(-1));
+ document.querySelector("#musicNext")?.addEventListener("click",()=>playNextMusic(1));
+ document.querySelector("#musicVolume")?.addEventListener("input",e=>{ensureMusicAudio().volume=Number(e.target.value);});
+ document.querySelector("#musicProgress")?.addEventListener("input",e=>{if(musicAudio&&Number.isFinite(musicAudio.duration))musicAudio.currentTime=(Number(e.target.value)/100)*musicAudio.duration;});
+ document.querySelector("#musicShuffle")?.addEventListener("click",async()=>{if(!musicTracks.length)return toast("Adicione músicas primeiro");const ids=musicTracks.map(t=>t.id).sort(()=>Math.random()-0.5);musicQueue=ids;musicQueueIndex=0;await playMusicTrack(musicTracks.find(t=>t.id===ids[0]),ids,0);});
+ document.querySelectorAll("[data-music-play]").forEach(b=>b.onclick=async()=>{const t=musicTracks.find(x=>x.id===Number(b.dataset.musicPlay));if(t)await playMusicTrack(t,musicTracks.map(x=>x.id),musicTracks.findIndex(x=>x.id===t.id));});
+ document.querySelectorAll("[data-music-delete]").forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.musicDelete);if(confirm("Excluir esta música da biblioteca?")){if(String(musicCurrentTrackId)===String(id)){ensureMusicAudio().pause();ensureMusicAudio().removeAttribute("src");musicCurrentTrackId=null;}await remove("musicTracks",id);for(const p of musicPlaylists){if((p.trackIds||[]).includes(id)){p.trackIds=p.trackIds.filter(x=>x!==id);await put("musicPlaylists",p);}}await loadData();render();}});
+ document.querySelector("#musicSearchForm")?.addEventListener("submit",async e=>{e.preventDefault();const q=String(new FormData(e.target).get("query")||"").trim();if(q.length<2)return toast("Digite pelo menos 2 caracteres");const box=document.querySelector("#musicSearchResults");if(box)box.innerHTML='<div class="empty">🔎 Buscando…</div>';try{const results=await searchMusicArtist(q);const target=document.querySelector("#musicSearchResults");if(!target)return;if(!results.length){target.innerHTML='<div class="empty">Nenhuma prévia encontrada para essa busca.</div>';return;}target.innerHTML=results.map((r,i)=>`<div class="list-item"><div class="music-track-main">${r.cover?`<img src="${esc(r.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(r.title)}</b><div class="muted">${esc(r.artist)} • Prévia</div></div></div><button class="btn primary" data-search-add="${i}">Adicionar</button></div>`).join("");target.querySelectorAll("[data-search-add]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchAdd)];await addMusicTrack(r);render();});}catch(error){const target=document.querySelector("#musicSearchResults");if(target)target.innerHTML='<div class="empty">⚠️ Não foi possível realizar a busca agora.</div>';}});
+ document.querySelectorAll("[data-music-playlist]").forEach(b=>b.onclick=async()=>{const p=musicPlaylists.find(x=>String(x.id)===String(b.dataset.musicPlaylist));const ids=(p?.trackIds||[]).filter(id=>musicTracks.some(t=>String(t.id)===String(id)));if(!ids.length)return toast("Essa playlist ainda está vazia");await playMusicTrack(musicTracks.find(t=>String(t.id)===String(ids[0])),ids,0);});
 }
 function render(){app.innerHTML=layout();bind()}
 window.addEventListener("beforeinstallprompt", e=>{
