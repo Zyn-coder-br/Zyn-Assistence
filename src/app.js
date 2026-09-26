@@ -1,4 +1,4 @@
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.5.1";
 const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 5;
 let db;
@@ -190,7 +190,7 @@ function goalsView(){
 function monthKey(date=todayISO()){ return String(date).slice(0,7); }
 function financeMonthLabel(key=monthKey()){ const [y,m]=key.split("-"); return new Date(Number(y),Number(m)-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}); }
 function financeMonthData(key=monthKey()){
- const tx=financeTransactions.filter(x=String(x.date||"").slice(0,7)===key);
+ const tx=financeTransactions.filter(x=>String(x.date||"").slice(0,7)===key);
  const income=tx.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount||0),0);
  const expense=tx.filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount||0),0);
  const bills=financeBills.filter(x=>x.active!==false && String(x.dueDate||"").slice(0,7)===key);
