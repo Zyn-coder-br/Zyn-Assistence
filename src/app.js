@@ -1,6 +1,6 @@
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 let db;
 let currentView = "home";
 let theme = localStorage.getItem("zyn-theme") || "light";
@@ -8,6 +8,7 @@ let reminders = [];
 let goals = [];
 let earnings = [];
 let gymProfile = null, gymPlans = [], gymSessions = [];
+let foodProfile = null, mealPlans = [], shoppingItems = [];
 
 document.body.className = theme;
 const app = document.querySelector("#app");
@@ -17,7 +18,7 @@ function openDB(){
     const request=indexedDB.open(DB_NAME,DB_VERSION);
     request.onupgradeneeded=()=>{
       const database=request.result;
-      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions"].forEach(store=>{
+      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems"].forEach(store=>{
         if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
       });
     };
@@ -102,6 +103,47 @@ function beachForm(){
  const el=modal(`<div class="row"><h2>🌊 Caminhada / Corrida</h2><button class="btn" id="close">×</button></div><form id="bw" class="stack"><div class="form-grid"><div class="field"><label>Atividade</label><select name="type"><option>Caminhada na praia</option><option>Corrida na praia</option></select></div><div class="field"><label>Data</label><input name="date" type="date" value="${todayISO()}"></div><div class="field"><label>Duração (min)</label><input name="duration" type="number" min="1" value="30"></div></div><button class="btn primary">Registrar</button></form>`);
  el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#bw").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("gymSessions",{date:f.get("date"),type:f.get("type"),duration:Number(f.get("duration")),workout:"Cardio"});closeModal(el);await loadData();render();toast("Atividade registrada")};
 }
+
+const FOOD_DAYS=["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"];
+const FOOD_DEFAULT=[
+ ["Café da manhã","Ovos + banana + aveia","Econômico"],
+ ["Almoço","Arroz + feijão + frango + salada","Completo"],
+ ["Lanche","Fruta + aveia ou pão + ovos","Prático"],
+ ["Jantar","Arroz + feijão + proteína + legumes","Econômico"]
+];
+function foodView(){
+ const p=foodProfile||{};
+ return `<div class="section-title"><h2>🍽️ Alimentação</h2><button class="btn primary" id="foodProfile">⚙️ Meu perfil</button></div>
+ <section class="card full food-hero"><div class="eyebrow">MINHA ALIMENTAÇÃO</div><h2>Comer melhor sem complicar</h2><p class="muted">3–4 refeições por dia, com foco em economia, praticidade e variedade.</p><div class="row"><span class="tag">Objetivo: perder gordura</span><span class="tag">Referência: ${money(p.budget||125)}/semana</span></div></section>
+ <div class="grid"><section class="card"><h3>📋 Meu perfil</h3><div class="stack"><div class="row"><span class="muted">Refeições</span><b>${p.meals||"3–4"}</b></div><div class="row"><span class="muted">Cozinha</span><b>${p.cooking||"Sim + prático"}</b></div><div class="row"><span class="muted">Evitar</span><b>Coco</b></div></div></section>
+ <section class="card"><h3>💡 Ideias</h3><div class="stack">${FOOD_DEFAULT.map(x=>`<div class="list-item"><div><b>${x[0]}</b><div class="muted">${x[1]}</div></div><span class="tag">${x[2]}</span></div>`).join("")}</div></section></div>
+ <div class="section-title"><h2>📅 Semana</h2><button class="btn" id="generateMeals">Gerar semana</button></div>
+ <div class="stack">${FOOD_DAYS.map(d=>`<section class="card full"><h3>${d}</h3><div class="stack">${(mealPlans.filter(x=>x.day===d).length?mealPlans.filter(x=>x.day===d):FOOD_DEFAULT.map((x,i)=>({slot:x[0],items:x[1],tag:x[2]}))).map(m=>`<div class="list-item"><div><b>${m.slot}</b><div class="muted">${m.items}</div></div><span class="tag">${m.tag}</span></div>`).join("")}</div></section>`).join("")}</div>
+ <div class="section-title"><h2>🛒 Lista de compras</h2><button class="btn primary" id="newShopping">+ Item</button></div>
+ <section class="card full"><div class="stack">${shoppingItems.map(x=>`<div class="list-item"><b>${esc(x.item)}</b><button class="btn" data-shop="${x.id}">${x.done?"✓ Comprado":"Marcar"}</button></div>`).join("")||'<div class="empty">Lista vazia. Gere a semana para criar uma lista inicial.</div>'}</div></section>`;
+}
+function foodProfileForm(){
+ const p=foodProfile||{},el=modal(`<div class="row"><h2>Meu perfil alimentar</h2><button class="btn" id="close">×</button></div><form id="foodForm" class="stack"><div class="form-grid">
+ <div class="field"><label>Refeições por dia</label><select name="meals"><option>3</option><option selected>3–4</option><option>4</option></select></div>
+ <div class="field"><label>Orçamento semanal de referência</label><input name="budget" type="number" min="0" step="10" value="${p.budget||125}"></div>
+ <div class="field"><label>Estilo</label><select name="cooking"><option selected>Sim + prático</option><option>Principalmente cozinhar</option><option>Principalmente prático</option></select></div>
+ <div class="field"><label>Alimentos que gosto</label><input name="likes" value="${esc(p.likes||"")}" placeholder="Ex.: frango, ovos, arroz"></div>
+ <div class="field full"><label>Alimentos que não quero</label><input name="avoid" value="${esc(p.avoid||"Coco e derivados")}"></div>
+ <div class="field full"><label>Rotina</label><textarea name="routine" rows="3">${esc(p.routine||"Trabalho 7h30–16h20 e trabalho noturno em parte da semana a partir das 19h.")}</textarea></div>
+ </div><p class="muted">O orçamento é uma referência e pode variar conforme compras da casa e preços locais.</p><button class="btn primary">Salvar perfil</button></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+ el.querySelector("#foodForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);foodProfile={id:1,meals:f.get("meals"),budget:Number(f.get("budget")),cooking:f.get("cooking"),likes:f.get("likes"),avoid:f.get("avoid"),routine:f.get("routine")};await put("foodProfile",foodProfile);await loadData();closeModal(el);render();toast("Perfil alimentar salvo")};
+}
+async function generateMeals(){
+ for(const day of FOOD_DAYS) for(const x of FOOD_DEFAULT) await put("mealPlans",{day,slot:x[0],items:x[1],tag:x[2]});
+ for(const item of ["Arroz","Feijão","Ovos","Frango","Banana","Aveia","Verduras/legumes","Frutas","Pão","Iogurte natural"]) if(!shoppingItems.some(x=>x.item===item)) await put("shoppingItems",{item,done:false});
+ await loadData();render();toast("Planejamento semanal criado");
+}
+function shoppingForm(){
+ const el=modal(`<div class="row"><h2>Adicionar item</h2><button class="btn" id="close">×</button></div><form id="shopForm" class="stack"><div class="field"><label>Item</label><input name="item" required placeholder="Ex.: tomate"></div><button class="btn primary">Adicionar</button></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+ el.querySelector("#shopForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("shoppingItems",{item:f.get("item"),done:false});closeModal(el);await loadData();render();toast("Item adicionado")};
+}
 function layout(){
  return `<div class="shell">
   <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
@@ -112,6 +154,7 @@ function layout(){
   <button data-view="reminders" class="${currentView==="reminders"?"active":""}">✓<br>Lembretes</button>
   <button data-view="goals" class="${currentView==="goals"?"active":""}">◎<br>Metas</button>
   <button data-view="gym" class="${currentView==="gym"?"active":""}">🏋️<br>GYM</button>
+  <button data-view="food" class="${currentView==="food"?"active":""}">🍽️<br>Comida</button>
   <button data-view="finance" class="${currentView==="finance"?"active":""}">R$<br>Finanças</button>
   <button data-view="habits" class="${currentView==="habits"?"active":""}">✦<br>Hábitos</button>
  </div></nav>`;
@@ -166,7 +209,7 @@ function earningForm(goalId){
  el.querySelector("#earningForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("earnings",{amount:Number(f.get("amount")),date:f.get("date"),source:f.get("source"),notes:f.get("notes"),goalId:goal?.id||null,createdAt:new Date().toISOString()});closeModal(el);await loadData();render();toast("Ganho registrado")};
 }
 
-async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions")}
+async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems")}
 function bind(){
  document.querySelector("#themeBtn").onclick=toggleTheme;
  document.querySelector("#updateBtn").onclick=()=>toast("Assistente Zyn v"+APP_VERSION);
@@ -177,6 +220,7 @@ function bind(){
  if(currentView==="goals")content.innerHTML=goalsView();
  if(currentView==="gym")content.innerHTML=gymView();
  if(currentView==="gymWorkout")content.innerHTML=gymWorkout();
+ if(currentView==="food")content.innerHTML=foodView();
  if(currentView==="finance")content.innerHTML=financeView();
  if(currentView==="habits")content.innerHTML=habitsView();
  document.querySelector("#newReminder")?.addEventListener("click",()=>reminderForm());
@@ -197,6 +241,10 @@ function bind(){
  document.querySelector("#beachWalk")?.addEventListener("click",beachForm);
  document.querySelector("#finishGym")?.addEventListener("click",async()=>{const p=gymToday(), ex=GYM_EX[p.workout]||[];const records=ex.map((x,i)=>({exercise:x[0],load:Number(document.querySelector(`[data-load="${i}"]`)?.value||0),reps:Number(document.querySelector(`[data-reps="${i}"]`)?.value||0)}));await put("gymSessions",{date:todayISO(),type:"Treino de academia",workout:p.workout,records});await loadData();toast("Treino salvo");currentView="gym";render()});
  document.querySelectorAll("[data-done]").forEach(b=>b.onclick=()=>{b.textContent="✓ Concluído";b.classList.add("primary")});
+ document.querySelector("#foodProfile")?.addEventListener("click",foodProfileForm);
+ document.querySelector("#generateMeals")?.addEventListener("click",generateMeals);
+ document.querySelector("#newShopping")?.addEventListener("click",shoppingForm);
+ document.querySelectorAll("[data-shop]").forEach(b=>b.onclick=async()=>{const x=shoppingItems.find(x=>x.id===Number(b.dataset.shop));if(x){x.done=!x.done;await put("shoppingItems",x);await loadData();render()}});
  document.querySelectorAll("[data-reminder-done]").forEach(b=>b.onclick=async()=>{const r=reminders.find(r=>r.id===Number(b.dataset.reminderDone));if(r){r.done=!r.done;await put("reminders",r);await loadData();render()}});
 }
 function render(){app.innerHTML=layout();bind()}
