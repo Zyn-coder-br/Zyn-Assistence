@@ -1,4 +1,4 @@
-# Zyn Assistente — V1.6.2
+# Zyn Assistente — V1.7.0
 
 ## Zyn Cloud + Login + sincronização
 
@@ -40,9 +40,18 @@ A configuração de confirmação de e-mail do Supabase pode exigir que você co
 - Instalação pelo navegador
 
 
-## V1.6.2 — Correção definitiva da chave Supabase + pacote limpo
+## V1.6.2 — Correção definitiva da chave Supabase + pacote limpo (base desta versão)
 - SDK Supabase JS fixado em 2.117.2.
 - Corrigida a Publishable Key do projeto Zyn Assistente.
-- Cache do Service Worker atualizado para V1.6.2.
+- Cache do Service Worker atualizado para V1.6.2 (base histórica).
 - Pacote interno reconstruído a partir do código real do GitHub.
-- Pasta interna do pacote padronizada para V1.6.2.
+- Pasta interna do pacote padronizada para V1.6.2 (base histórica).
+
+
+## V1.7.0 — Zyn Music
+- Player de áudio online com fila, playlists e controles básicos.
+- Media Session API para integração com controles de mídia do Android quando suportado.
+- Adição por URL direta de áudio.
+- Busca de artista/banda com prévias disponíveis via iTunes Search API.
+- Biblioteca e playlists persistidas no IndexedDB e incluídas na sincronização existente.
+- Importante: prévias de busca podem ser trechos curtos; músicas completas dependem de uma fonte/serviço que forneça uma URL de áudio autorizada.
