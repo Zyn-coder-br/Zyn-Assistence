@@ -1,13 +1,13 @@
 {
   "id": "./",
-  "name": "Assistente Zyn",
+  "name": "Zyn Assistente",
   "short_name": "Zyn",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#171522",
-  "theme_color": "#7465c9",
-  "description": "Assistente pessoal para organizar rotina, metas, finanças, GYM e alimentação.",
+  "background_color": "#17121f",
+  "theme_color": "#7a4dcc",
+  "description": "Assistente pessoal para organizar sua vida, metas, finanças, GYM e alimentação.",
   "categories": [
     "productivity",
     "lifestyle",
