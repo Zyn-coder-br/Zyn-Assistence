@@ -55,3 +55,15 @@ A configuração de confirmação de e-mail do Supabase pode exigir que você co
 - Busca de artista/banda com prévias disponíveis via iTunes Search API.
 - Biblioteca e playlists persistidas no IndexedDB e incluídas na sincronização existente.
 - Importante: prévias de busca podem ser trechos curtos; músicas completas dependem de uma fonte/serviço que forneça uma URL de áudio autorizada.
+
+
+## V1.7.4 — Zyn Music persistente
+- Corrigido o player para não ser destruído ao trocar de painel.
+- Áudio direto continua em reprodução ao navegar entre áreas.
+- Player YouTube oficial permanece montado em um dock persistente.
+- Navegação inferior reorganizada em 5 itens sem scroll horizontal; áreas extras ficam em “Mais”.
+- Resultados de busca deixam claro que a prévia é de 30s e oferecem busca da versão completa no YouTube.
+- Links do YouTube continuam podendo ser adicionados à biblioteca/playlist e reproduzidos pelo player oficial.
+- Mantido login e restante do aplicativo.
+
+Observação: a busca de catálogo usada pelo Zyn fornece apenas prévias. Para reprodução completa pelo YouTube, use o botão YouTube para localizar a versão completa e depois adicione o link do vídeo em “+ Link”.
