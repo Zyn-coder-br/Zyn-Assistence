@@ -57,7 +57,7 @@ A configuração de confirmação de e-mail do Supabase pode exigir que você co
 - Importante: prévias de busca podem ser trechos curtos; músicas completas dependem de uma fonte/serviço que forneça uma URL de áudio autorizada.
 
 
-## V1.7.4 — Zyn Music persistente
+## V1.7.5 — Zyn Music persistente
 - Corrigido o player para não ser destruído ao trocar de painel.
 - Áudio direto continua em reprodução ao navegar entre áreas.
 - Player YouTube oficial permanece montado em um dock persistente.
