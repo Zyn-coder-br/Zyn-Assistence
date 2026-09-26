@@ -67,3 +67,14 @@ A configuração de confirmação de e-mail do Supabase pode exigir que você co
 - Mantido login e restante do aplicativo.
 
 Observação: a busca de catálogo usada pelo Zyn fornece apenas prévias. Para reprodução completa pelo YouTube, use o botão YouTube para localizar a versão completa e depois adicione o link do vídeo em “+ Link”.
+
+
+## V1.8.0 — Layout profissional + Investimentos
+- Padronização visual do módulo de investimentos no mesmo sistema de painéis do Zyn.
+- Carteira de investimentos com Ações, FIIs, ETFs, Renda fixa, Cripto e Outros.
+- Cadastro/edição/exclusão de ativos com ticker, nome, tipo, quantidade, preço médio, preço atual, proventos e instituição.
+- Cálculo local de capital aplicado, valor atual, resultado, percentual e distribuição por tipo.
+- Acesso aos investimentos dentro de Finanças, sem criar um sexto item na navegação inferior.
+- A navegação inferior permanece: Início, Planejar, Bem-estar, Finanças e Mais.
+- Player/dock de música continua acima da barra de navegação.
+- Novo object store IndexedDB `investmentAssets`, incluído na sincronização do Zyn Cloud.
