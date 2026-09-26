@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.7.2";
+const APP_VERSION = "1.7.4";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.7.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.7.4", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -164,11 +164,11 @@ function musicView(){
   const playlists=musicPlaylists;
   const youtube=isYouTubeTrack(track);
   const cover=track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa" />`:`<div class="music-cover-placeholder" id="musicNowCover">🎧</div>`;
-  const playerMedia=youtube?`<div class="youtube-player-wrap"><div id="youtubePlayer"></div><div class="youtube-note">▶️ Reprodução completa pelo player oficial do YouTube. O comportamento em segundo plano/tela bloqueada depende do navegador e do próprio YouTube.</div></div>`:``;
-  return `<div class="section-title"><div><h2>🎧 Zyn Music</h2><div class="muted">Player pessoal com prévias, links diretos e vídeos do YouTube.</div></div><div class="actions"><button class="btn" id="musicPlaylistNew">+ Playlist</button><button class="btn primary" id="musicAddLink">+ Link</button></div></div>
+  const playerMedia=``;
+  return `<div class="section-title"><div><h2>🎧 Zyn Music</h2><div class="muted">Player pessoal com áudio direto, links do YouTube e prévias de busca.</div></div><div class="actions"><button class="btn" id="musicPlaylistNew">+ Playlist</button><button class="btn primary" id="musicAddLink">+ Link</button></div></div>
   <section class="music-player card full">${playerMedia}<div class="music-now">${cover}<div class="music-meta"><div class="eyebrow">TOCANDO AGORA</div><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música selecionada")}</h2><div class="muted" id="musicNowArtist">${esc(track?.artist||"Escolha uma música ou adicione um link")}</div><div class="tag" id="musicStatus">${youtube?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado")}</div></div></div>
   ${youtube?``:`<input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Progresso da música"/><div class="music-times"><span id="musicCurrentTime">0:00</span><span id="musicDuration">0:00</span></div>`}<div class="music-controls"><button class="music-control" id="musicPrev" title="Anterior">⏮️</button><button class="music-control music-play" id="musicPlayBtn" title="Play/Pause">▶️</button><button class="music-control" id="musicNext" title="Próxima">⏭️</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><label class="music-volume">🔊 <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="${musicAudio?musicAudio.volume:1}"/></label></div></section>
-  <section class="card full"><div class="row"><h3>🔎 Buscar artista / banda</h3><span class="tag">prévia oficial</span></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">Busque uma música e <b>ouça a prévia antes de adicionar</b> à playlist.</div></div></section>
+  <section class="card full"><div class="row"><h3>🔎 Buscar artista / banda</h3><span class="tag">prévia + YouTube</span></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">Busque uma música e <b>ouça a prévia antes de adicionar</b> à playlist.</div></div></section>
   <section class="card full"><div class="row"><h3>🎼 Minhas playlists</h3><span class="tag">${playlists.length}</span></div><div class="music-playlists">${playlists.map(p=>`<button class="music-playlist" data-music-playlist="${p.id}"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></button>`).join("")||`<div class="empty">Crie sua primeira playlist.</div>`}</div></section>
   <section class="card full"><div class="row"><h3>🎵 Biblioteca</h3><span class="tag">${musicTracks.length} faixa(s)</span></div><div class="stack">${musicTracks.slice().reverse().map(t=>`<div class="list-item music-track-item"><div class="music-track-main">${t.cover?`<img src="${esc(t.cover)}" alt=""/>`:`<div class="mini-cover">${isYouTubeTrack(t)?"▶️":"🎵"}</div>`}<div><b>${esc(t.title)}</b><div class="muted">${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":t.source==="youtube"?" • YouTube":""}</div></div></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||`<div class="empty">Nenhuma música ainda. Adicione um link direto ou um link do YouTube.</div>`}</div></section>`;
 }
@@ -299,6 +299,7 @@ function goalProgress(goal){const amount=weekEarnings(goal);return Math.min(100,
 function dayAmount(goal,date=todayISO()){return earnings.filter(e=>e.date===date&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
 function activeGoal(){return goals.find(g=>g.active!==false)||goals[0]}
 function toast(message){const el=document.createElement("div");el.textContent=message;Object.assign(el.style,{position:"fixed",bottom:"82px",left:"50%",transform:"translateX(-50%)",background:"var(--text)",color:"var(--surface)",padding:"12px 17px",borderRadius:"12px",zIndex:40,boxShadow:"0 8px 30px #0003"});document.body.appendChild(el);setTimeout(()=>el.remove(),2500)}
+function uiIcon(name){const paths={home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',plan:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M7 10h10M8 14h3M14 14h2"/>',well:'<path d="M8 5v5M16 5v5M5 8h6M13 8h6M7 13c0 3 2 5 5 5s5-2 5-5"/>',finance:'<path d="M4 18V8M10 18V5M16 18v-7M21 18H3"/><path d="m17 7 3-3 2 2"/>',music:'<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="3"/><circle cx="16.5" cy="16" r="3"/>',assistant:'<path d="M7 8h10a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4H9l-4 3v-7a4 4 0 0 1-2-3v-1a4 4 0 0 1 4-4Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'};return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.home}</svg>`}
 function setView(view){currentView=view;render()}
 function toggleTheme(){theme=theme==="light"?"dark":"light";localStorage.setItem("zyn-theme",theme);document.body.className=theme;render()}
 function modal(content){const wrapper=document.createElement("div");wrapper.className="modal-backdrop";wrapper.innerHTML=`<div class="modal">${content}</div>`;document.body.appendChild(wrapper);return wrapper}
@@ -370,8 +371,8 @@ const FOOD_DEFAULT=[
 ];
 function foodView(){
  const p=foodProfile||{};
- return `<div class="section-title"><h2>🍽️ Alimentação</h2><button class="btn primary" id="foodProfile">⚙️ Meu perfil</button></div>
- <section class="card full food-hero"><div class="eyebrow">MINHA ALIMENTAÇÃO</div><h2>Comer melhor sem complicar</h2><p class="muted">3–4 refeições por dia, com foco em economia, praticidade e variedade.</p><div class="row"><span class="tag">Objetivo: perder gordura</span><span class="tag">Referência: ${money(p.budget||125)}/semana</span></div></section>
+ return `<div class="section-title"><h2>🥗 Dietas</h2><button class="btn primary" id="foodProfile">⚙️ Meu perfil</button></div>
+ <section class="card full food-hero"><div class="eyebrow">MINHAS DIETAS</div><h2>Comer melhor sem complicar</h2><p class="muted">3–4 refeições por dia, com foco em economia, praticidade e variedade.</p><div class="row"><span class="tag">Objetivo: perder gordura</span><span class="tag">Referência: ${money(p.budget||125)}/semana</span></div></section>
  <div class="grid"><section class="card"><h3>📋 Meu perfil</h3><div class="stack"><div class="row"><span class="muted">Refeições</span><b>${p.meals||"3–4"}</b></div><div class="row"><span class="muted">Cozinha</span><b>${p.cooking||"Sim + prático"}</b></div><div class="row"><span class="muted">Evitar</span><b>Coco</b></div></div></section>
  <section class="card"><h3>💡 Ideias</h3><div class="stack">${FOOD_DEFAULT.map(x=>`<div class="list-item"><div><b>${x[0]}</b><div class="muted">${x[1]}</div></div><span class="tag">${x[2]}</span></div>`).join("")}</div></section></div>
  <div class="section-title"><h2>📅 Semana</h2><button class="btn" id="generateMeals">Gerar semana</button></div>
@@ -401,20 +402,52 @@ function shoppingForm(){
  el.querySelector("#close").onclick=()=>closeModal(el);
  el.querySelector("#shopForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("shoppingItems",{item:f.get("item"),done:false});closeModal(el);await loadData();render();toast("Item adicionado")};
 }
+function syncMusicDock(){
+ const dock=document.querySelector("#musicDock");
+ if(!dock)return;
+ const track=currentMusicTrack();
+ const active=!!track;
+ dock.classList.toggle("active",active);
+ dock.classList.toggle("expanded",currentView==="music");
+ const title=dock.querySelector("#dockTitle");
+ const artist=dock.querySelector("#dockArtist");
+ const play=dock.querySelector("#dockPlay");
+ const cover=dock.querySelector("#dockCover");
+ if(title)title.textContent=track?.title||"Nenhuma música";
+ if(artist)artist.textContent=track?.artist||"Zyn Music";
+ if(cover){cover.textContent=track?.cover?"":"🎧";cover.style.backgroundImage=track?.cover?`url("${String(track.cover).replace(/"/g,"%22")}")`:"";}
+ if(play){const playing=isYouTubeTrack(track)?youtubePlayer?.getPlayerState?.()===1:!!musicAudio&&!musicAudio.paused;play.textContent=playing?"⏸️":"▶️";}
+ const host=document.querySelector("#youtubePlayer");
+ if(host)host.classList.toggle("visible",isYouTubeTrack(track));
+ updateMusicUI();
+}
+function moreMenu(){
+ const el=modal(`<div class="section-title"><div><h3>☰ Mais</h3><div class="muted">Outras áreas do Zyn</div></div><button class="btn" id="closeMore">Fechar</button></div><div class="more-grid">
+ <button class="more-item" data-more-view="planning">${uiIcon("plan")}<b>Planejamento</b><span>Lembretes + Metas</span></button>
+ <button class="more-item" data-more-view="wellness">${uiIcon("well")}<b>Bem-estar</b><span>GYM + Dietas + Hábitos</span></button>
+ <button class="more-item" data-more-view="finance">${uiIcon("finance")}<b>Finanças</b><span>Controle financeiro</span></button>
+ <button class="more-item" data-more-view="music">${uiIcon("music")}<b>Música</b><span>Zyn Music</span></button>
+ <button class="more-item" data-more-view="assistant">${uiIcon("assistant")}<b>Zyn Assistente</b><span>Seu assistente pessoal</span></button>
+ </div>`);
+ el.querySelector("#closeMore")?.addEventListener("click",()=>closeModal(el));
+ el.querySelectorAll("[data-more-view]").forEach(b=>b.addEventListener("click",()=>{const v=b.dataset.moreView;closeModal(el);setView(v);}));
+}
+
 function layout(){
  return `<div class="shell">
   <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="cloud-status offline" id="cloudStatus" title="Status da nuvem"><span></span>Entrar para sincronizar</button><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇️</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
   <main id="content"></main>
  </div>
+ <div id="musicDock" class="music-dock">
+   <div id="youtubePlayer" class="youtube-persistent-host"></div>
+   <div class="music-dock-main"><div id="dockCover" class="music-dock-cover">🎧</div><div class="music-dock-meta"><b id="dockTitle">Nenhuma música</b><span id="dockArtist">Zyn Music</span></div><button class="music-dock-btn" id="dockPrev" title="Anterior">⏮️</button><button class="music-dock-btn dock-play" id="dockPlay" title="Play/Pause">▶️</button><button class="music-dock-btn" id="dockNext" title="Próxima">⏭️</button><button class="music-dock-open" id="dockOpen" title="Abrir Zyn Music">🎧</button></div>
+ </div>
  <nav class="nav"><div class="nav-inner">
-  <button data-view="home" class="${currentView==="home"?"active":""}">⌂<br>Início</button>
-  <button data-view="reminders" class="${currentView==="reminders"?"active":""}">✓<br>Lembretes</button>
-  <button data-view="goals" class="${currentView==="goals"?"active":""}">◎<br>Metas</button>
-  <button data-view="gym" class="${currentView==="gym"?"active":""}">🏋️<br>GYM</button>
-  <button data-view="food" class="${currentView==="food"?"active":""}">🍽️<br>Comida</button>
-  <button data-view="finance" class="${currentView==="finance"?"active":""}">R$<br>Finanças</button>
-  <button data-view="habits" class="${currentView==="habits"?"active":""}">✦<br>Hábitos</button>
-  <button data-view="music" class="${currentView==="music"?"active":""}">🎧<br>Música</button>
+  <button data-view="home" class="${currentView==="home"?"active":""}">${uiIcon("home")}<span>Início</span></button>
+  <button data-view="planning" class="${["planning","reminders","goals"].includes(currentView)?"active":""}">${uiIcon("plan")}<span>Planejar</span></button>
+  <button data-view="wellness" class="${["wellness","gym","gymWorkout","food","habits"].includes(currentView)?"active":""}">${uiIcon("well")}<span>Bem-estar</span></button>
+  <button data-view="finance" class="${currentView==="finance"?"active":""}">${uiIcon("finance")}<span>Finanças</span></button>
+  <button id="moreNav" class="${["music","assistant"].includes(currentView)?"active":""}">${uiIcon("more")}<span>Mais</span></button>
  </div></nav>`;
 }
 
@@ -423,17 +456,45 @@ function homeView(){
  const amount=goal?weekEarnings(goal):0;
  const progress=goal?goalProgress(goal):0;
  const today=goal?dayAmount(goal):0;
- const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,4);
- return `<section class="hero"><div class="eyebrow" style="color:#e8e2ff">SEU DIA EM FOCO</div><h2>Olá, Ramon 👋</h2><p>Organize suas tarefas, acompanhe suas metas e mantenha o controle da sua rotina.</p></section>
- <div class="grid">
-  <section class="card full"><div class="row"><h3>🎯 ${goal?esc(goal.name):"Sua próxima meta"}</h3><span class="tag">${goal?"Semanal":"Comece agora"}</span></div>
-   ${goal?`<div class="row"><div><div class="metric">${money(amount)}</div><div class="muted">de ${money(goal.target)} conquistados</div></div><div style="text-align:right"><div class="metric">${progress.toFixed(1)}%</div><div class="muted">progresso semanal</div></div></div><div class="progress"><div style="width:${progress}%"></div></div><div class="row"><span class="muted">Meta diária: ${money(goal.dailyTarget)}</span><span class="muted">Hoje: ${money(today)}</span></div><div class="row" style="margin-top:14px"><button class="btn primary" id="quickEarning">+ Registrar ganho</button><button class="btn" id="openGoals">Ver metas</button></div>`:`<div class="empty">Você ainda não criou uma meta. Crie uma meta semanal para começar.</div><button class="btn primary" id="createGoal" style="margin-top:12px">+ Criar primeira meta</button>`}
-  </section>
-  <section class="card"><div class="row"><h3>🔔 Lembretes</h3><span class="tag">${reminders.filter(r=>!r.done).length} pendentes</span></div>${pending.length?`<div class="stack">${pending.map(r=>`<div class="list-item"><div><b>${esc(r.title)}</b><div class="muted">${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div></div><span class="tag warning">Pendente</span></div>`).join("")}</div>`:`<div class="empty">Nenhum lembrete pendente.</div>`}<button class="btn" id="homeReminders" style="margin-top:12px">Abrir lembretes</button></section>
-  <section class="card"><h3>📊 Resumo rápido</h3><div class="stack"><div class="row"><span class="muted">Ganhos nesta semana</span><b>${money(earnings.filter(e=>getCurrentWeekDays().includes(e.date)).reduce((s,e)=>s+Number(e.amount||0),0))}</b></div><div class="row"><span class="muted">Metas cadastradas</span><b>${goals.length}</b></div><div class="row"><span class="muted">Lembretes concluídos</span><b>${reminders.filter(r=>r.done).length}</b></div></div></section>
-  <section class="card full music-home-card"><div class="row"><div><div class="eyebrow">🎧 ZYN MUSIC</div><h3>${esc(currentMusicTrack()?.title||"Sua música")}</h3><div class="muted">${esc(currentMusicTrack()?.artist||"Player pessoal")}</div></div><button class="btn primary" id="homeMusic">Abrir player</button></div></section>
- </div>`;
+ const pending=reminders.filter(r=>!r.done).length;
+ const gymSessionsCount=gymCount();
+ const shoppingPending=shoppingItems.filter(x=>!x.done).length;
+ const finance=financeMonthData();
+ const track=currentMusicTrack();
+ return `<section class="home-hero"><div><div class="eyebrow">ZYN ASSISTENTE PESSOAL</div><h1>Olá, Ramon.</h1><p>Seu painel central para organizar o dia, cuidar da rotina e acompanhar o que importa.</p></div><div class="home-date">${new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</div></section>
+ <section class="home-panels">
+  <button class="home-panel-card panel-plan" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><span class="panel-kicker">ORGANIZAÇÃO</span><h3>Planejamento</h3><p>Lembretes + Metas em um único painel.</p><div class="panel-stat"><b>${pending}</b><span>pendentes</span><i>${progress.toFixed(0)}% da meta</i></div></div><span class="panel-arrow">›</span></button>
+  <button class="home-panel-card panel-well" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><span class="panel-kicker">ROTINA & SAÚDE</span><h3>Bem-estar</h3><p>GYM + Dietas + Hábitos no mesmo espaço.</p><div class="panel-stat"><b>${gymSessionsCount}</b><span>sessões/semana</span><i>${shoppingPending} itens de compras</i></div></div><span class="panel-arrow">›</span></button>
+  <button class="home-panel-card panel-finance" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><span class="panel-kicker">CONTROLE</span><h3>Finanças</h3><p>Visão mensal do dinheiro que entra, sai e sobra.</p><div class="panel-stat"><b>${money(Math.max(0,finance.available))}</b><span>disponível</span><i>${money(finance.expense)} em despesas</i></div></div><span class="panel-arrow">›</span></button>
+  <button class="home-panel-card panel-music" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><span class="panel-kicker">ENTRETENIMENTO</span><h3>Zyn Music</h3><p>Suas playlists, links e reprodução.</p><div class="panel-stat"><b>${musicTracks.length}</b><span>faixas</span><i>${track?esc(track.title):"Nada tocando"}</i></div></div><span class="panel-arrow">›</span></button>
+  <button class="home-panel-card panel-assistant" data-home-view="assistant"><span class="panel-icon">${uiIcon("assistant")}</span><div class="panel-copy"><span class="panel-kicker">INTELIGÊNCIA PESSOAL</span><h3>Zyn Assistente</h3><p>O centro para conversar e conectar seus painéis.</p><div class="panel-stat"><b>∞</b><span>possibilidades</span><i>Seu assistente pessoal</i></div></div><span class="panel-arrow">›</span></button>
+ </section>
+ <section class="home-summary-grid">
+  <section class="card home-summary"><div class="row"><div><span class="eyebrow">META ATIVA</span><h3>${goal?esc(goal.name):"Nenhuma meta criada"}</h3></div><span class="tag">${goal?money(amount)+" / "+money(goal.target):"Começar"}</span></div>${goal?`<div class="progress"><div style="width:${progress}%"></div></div><div class="row"><span class="muted">Hoje: ${money(today)}</span><button class="btn" id="homePlanning">Abrir planejamento</button></div>`:`<button class="btn primary" id="homePlanning">Abrir planejamento</button>`}</section>
+  <section class="card home-summary music-home-card"><div class="row"><div><span class="eyebrow">TOCANDO AGORA</span><h3>${esc(track?.title||"Sua música")}</h3><div class="muted">${esc(track?.artist||"Abra o Zyn Music para começar")}</div></div><button class="btn primary" id="homeMusic">Abrir</button></div></section>
+ </section>`;
 }
+
+function planningView(){
+ const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,5); const goal=activeGoal(); const amount=goal?weekEarnings(goal):0; const p=goal?goalProgress(goal):0;
+ return `<div class="section-title"><div><span class="eyebrow">ORGANIZAÇÃO</span><h2>Planejamento</h2><div class="muted">Lembretes e metas agora vivem no mesmo painel.</div></div><div class="actions"><button class="btn" id="planningReminder">+ Lembrete</button><button class="btn primary" id="planningGoal">+ Meta</button></div></div><div class="grid planning-grid">
+ <section class="card planning-hero"><div class="row"><div><span class="eyebrow">META ATIVA</span><h2>${goal?esc(goal.name):"Crie sua primeira meta"}</h2></div><span class="tag">${goal?p.toFixed(0)+"%":"Novo"}</span></div>${goal?`<div class="metric">${money(amount)}</div><div class="muted">de ${money(goal.target)} nesta semana</div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Meta diária ${money(goal.dailyTarget)}</span><button class="btn" id="planningGoals">Gerenciar metas</button></div>`:`<button class="btn primary" id="planningGoals">Criar meta</button>`}</section>
+ <section class="card"><div class="row"><h3>${uiIcon("plan")} Próximos lembretes</h3><span class="tag">${reminders.filter(r=>!r.done).length}</span></div>${pending.length?`<div class="stack">${pending.map(r=>`<div class="list-item"><div><b>${esc(r.title)}</b><div class="muted">${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div></div><span class="tag warning">Pendente</span></div>`).join("")}</div>`:`<div class="empty">Nenhum lembrete pendente.</div>`}<button class="btn" id="planningReminders" style="margin-top:12px">Ver todos</button></section>
+ </div>
+ <div class="section-title"><h3>Visão rápida</h3></div><div class="grid"><section class="card"><div class="muted">Lembretes concluídos</div><div class="metric">${reminders.filter(r=>r.done).length}</div></section><section class="card"><div class="muted">Metas cadastradas</div><div class="metric">${goals.length}</div></section><section class="card"><div class="muted">Ganhos nesta semana</div><div class="metric">${money(earnings.filter(e=>getCurrentWeekDays().includes(e.date)).reduce((s,e)=>s+Number(e.amount||0),0))}</div></section></div>`;
+}
+
+function wellnessView(){
+ const t=gymToday(); const c=gymCount(); const p=foodProfile||{}; const shopping=shoppingItems.filter(x=>!x.done).length;
+ return `<div class="section-title"><div><span class="eyebrow">ROTINA & SAÚDE</span><h2>Bem-estar</h2><div class="muted">Tudo que ajuda você a cuidar do corpo e da rotina.</div></div></div><section class="wellness-hero card full"><div><span class="eyebrow">HOJE</span><h2>${esc(t.workout)}</h2><p class="muted">${t.type==="rest"?"Dia de recuperação":"Treino principal"} • ${c} sessão(ões) nesta semana</p></div><button class="btn primary" id="wellGym">Abrir GYM</button></section><div class="wellness-grid">
+ <button class="wellness-card" data-well-view="gym"><span class="panel-icon">${uiIcon("well")}</span><span class="eyebrow">MOVIMENTO</span><h3>GYM</h3><p>Treino de hoje, semana, histórico e caminhada.</p><b>${c} sessões</b></button>
+ <button class="wellness-card" data-well-view="food"><span class="panel-icon">${uiIcon("well")}</span><span class="eyebrow">ALIMENTAÇÃO</span><h3>Dietas</h3><p>Planejamento semanal, perfil e lista de compras.</p><b>${shopping} itens pendentes</b></button>
+ <button class="wellness-card" data-well-view="habits"><span class="panel-icon">${uiIcon("plan")}</span><span class="eyebrow">CONSISTÊNCIA</span><h3>Hábitos</h3><p>Rotinas e hábitos serão acompanhados aqui.</p><b>${0} registros</b></button>
+ </div><div class="card full"><div class="row"><div><span class="eyebrow">DIETAS</span><h3>${money(p.budget||125)}/semana de referência</h3><div class="muted">${p.meals||"3–4"} refeições por dia • foco em praticidade e variedade.</div></div><button class="btn" id="wellDiet">Abrir Dietas</button></div></div>`;
+}
+function awaitableHabitsCount(){return 0}
+
+function assistantView(){return `<div class="section-title"><div><span class="eyebrow">CENTRO DO ZYN</span><h2>Zyn Assistente</h2><div class="muted">Seu assistente pessoal para conectar organização, bem-estar, finanças e música.</div></div></div><section class="assistant-hero card full"><div class="assistant-orb">${uiIcon("assistant")}</div><div><span class="eyebrow">ASSISTENTE PESSOAL</span><h2>O que você quer organizar hoje?</h2><p class="muted">Esta área será o centro inteligente do Zyn. Por enquanto, use os painéis abaixo para acessar cada parte da sua rotina.</p></div></section><div class="assistant-actions"><button class="home-panel-card" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><h3>Planejamento</h3><p>Lembretes e metas.</p></div></button><button class="home-panel-card" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><h3>Bem-estar</h3><p>GYM, Dietas e Hábitos.</p></div></button><button class="home-panel-card" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><h3>Finanças</h3><p>Seu controle financeiro.</p></div></button><button class="home-panel-card" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><h3>Zyn Music</h3><p>Seu player pessoal.</p></div></button></div>`}
 
 function remindersView(){
  return `<div class="section-title"><h2>Lembretes</h2><button class="btn primary" id="newReminder">+ Novo</button></div><div class="stack">${reminders.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(r=>`<div class="list-item ${r.done?"done":""}"><div><b>${esc(r.title)}</b><div class="muted">${esc(r.category||"Geral")} • ${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div>${r.notes?`<div class="muted">${esc(r.notes)}</div>`:""}</div><div class="actions"><button class="btn" data-reminder-done="${r.id}">${r.done?"↩":"✓"}</button><button class="btn" data-reminder-edit="${r.id}">✎</button><button class="btn danger" data-reminder-delete="${r.id}">×</button></div></div>`).join("")||`<div class="empty">Você ainda não cadastrou lembretes.</div>`}</div>`;
@@ -622,16 +683,24 @@ function bind(){
  const cloud=document.querySelector("#cloudStatus"); if(cloud){cloud.className=`cloud-status ${cloudStatus}`;cloud.title=cloudMessage;cloud.innerHTML=`<span></span>${esc(cloudStatus==="synced"?cloudMessage:(currentUser()?"Conta conectada — toque para sincronizar":"Entrar para sincronizar"))}`;}
  document.querySelector("#updateBtn").onclick=()=>toast("Assistente Zyn v"+APP_VERSION);
  document.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>setView(btn.dataset.view));
+ document.querySelector("#moreNav")?.addEventListener("click",moreMenu);
+ document.querySelector("#dockPrev")?.addEventListener("click",()=>playNextMusic(-1));
+ document.querySelector("#dockNext")?.addEventListener("click",()=>playNextMusic(1));
+ document.querySelector("#dockPlay")?.addEventListener("click",toggleMusicPlay);
+ document.querySelector("#dockOpen")?.addEventListener("click",()=>setView("music"));
  const content=document.querySelector("#content");
  if(currentView==="home")content.innerHTML=homeView();
+ if(currentView==="planning")content.innerHTML=planningView();
  if(currentView==="reminders")content.innerHTML=remindersView();
  if(currentView==="goals")content.innerHTML=goalsView();
+ if(currentView==="wellness")content.innerHTML=wellnessView();
  if(currentView==="gym")content.innerHTML=gymView();
  if(currentView==="gymWorkout")content.innerHTML=gymWorkout();
  if(currentView==="food")content.innerHTML=foodView();
  if(currentView==="finance")content.innerHTML=financeView();
  if(currentView==="habits")content.innerHTML=habitsView();
  if(currentView==="music")content.innerHTML=musicView();
+ if(currentView==="assistant")content.innerHTML=assistantView();
  document.querySelector("#newReminder")?.addEventListener("click",()=>reminderForm());
  document.querySelector("#newGoal")?.addEventListener("click",()=>goalForm());
  document.querySelector("#createGoal")?.addEventListener("click",()=>goalForm({target:700,dailyTarget:100,name:"Meta Uber e Entregas",source:"all"}));
@@ -660,6 +729,15 @@ function bind(){
  document.querySelectorAll("[data-shop]").forEach(b=>b.onclick=async()=>{const x=shoppingItems.find(x=>x.id===Number(b.dataset.shop));if(x){x.done=!x.done;await put("shoppingItems",x);await loadData();render()}});
  document.querySelectorAll("[data-reminder-done]").forEach(b=>b.onclick=async()=>{const r=reminders.find(r=>r.id===Number(b.dataset.reminderDone));if(r){r.done=!r.done;await put("reminders",r);await loadData();render()}});
  document.querySelector("#homeMusic")?.addEventListener("click",()=>setView("music"));
+ document.querySelectorAll("[data-home-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.homeView)));
+ document.querySelector("#homePlanning")?.addEventListener("click",()=>setView("planning"));
+ document.querySelector("#planningReminder")?.addEventListener("click",()=>reminderForm());
+ document.querySelector("#planningGoal")?.addEventListener("click",()=>goalForm());
+ document.querySelector("#planningReminders")?.addEventListener("click",()=>setView("reminders"));
+ document.querySelector("#planningGoals")?.addEventListener("click",()=>setView("goals"));
+ document.querySelector("#wellGym")?.addEventListener("click",()=>setView("gym"));
+ document.querySelector("#wellDiet")?.addEventListener("click",()=>setView("food"));
+ document.querySelectorAll("[data-well-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.wellView)));
  document.querySelector("#musicAddLink")?.addEventListener("click",musicLinkForm);
  document.querySelector("#musicPlaylistNew")?.addEventListener("click",async()=>{const name=prompt("Nome da playlist:");if(name)await createMusicPlaylist(name);});
  document.querySelector("#musicPlayBtn")?.addEventListener("click",toggleMusicPlay);
@@ -670,11 +748,18 @@ function bind(){
  document.querySelector("#musicShuffle")?.addEventListener("click",async()=>{if(!musicTracks.length)return toast("Adicione músicas primeiro");const ids=musicTracks.map(t=>t.id).sort(()=>Math.random()-0.5);musicQueue=ids;musicQueueIndex=0;await playMusicTrack(musicTracks.find(t=>t.id===ids[0]),ids,0);});
  document.querySelectorAll("[data-music-play]").forEach(b=>b.onclick=async()=>{const t=musicTracks.find(x=>x.id===Number(b.dataset.musicPlay));if(t)await playMusicTrack(t,musicTracks.map(x=>x.id),musicTracks.findIndex(x=>x.id===t.id));});
  document.querySelectorAll("[data-music-delete]").forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.musicDelete);if(confirm("Excluir esta música da biblioteca?")){if(String(musicCurrentTrackId)===String(id)){ensureMusicAudio().pause();ensureMusicAudio().removeAttribute("src");musicCurrentTrackId=null;}await remove("musicTracks",id);for(const p of musicPlaylists){if((p.trackIds||[]).includes(id)){p.trackIds=p.trackIds.filter(x=>x!==id);await put("musicPlaylists",p);}}await loadData();render();}});
- document.querySelector("#musicSearchForm")?.addEventListener("submit",async e=>{e.preventDefault();const q=String(new FormData(e.target).get("query")||"").trim();if(q.length<2)return toast("Digite pelo menos 2 caracteres");const box=document.querySelector("#musicSearchResults");if(box)box.innerHTML='<div class="empty">🔎 Buscando…</div>';try{const results=await searchMusicArtist(q);const target=document.querySelector("#musicSearchResults");if(!target)return;if(!results.length){target.innerHTML='<div class="empty">Nenhuma prévia encontrada para essa busca.</div>';return;}target.innerHTML=results.map((r,i)=>`<div class="list-item"><div class="music-track-main">${r.cover?`<img src="${esc(r.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(r.title)}</b><div class="muted">${esc(r.artist)} • Prévia oficial</div></div></div><div class="actions"><button class="btn" data-search-preview="${i}">▶ Ouvir prévia</button><button class="btn primary" data-search-add="${i}">Adicionar</button></div></div>`).join("");target.querySelectorAll("[data-search-preview]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchPreview)];musicPreviewTrack=r;ensureMusicAudio();if(youtubePlayer){try{youtubePlayer.pauseVideo();}catch(e){}}musicAudio.src=r.url;musicAudio.load();try{await musicAudio.play();}catch(e){toast("Toque novamente para ouvir a prévia");}updateMusicUI();updateMediaSession();});target.querySelectorAll("[data-search-add]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchAdd)];musicPreviewTrack=null;await addMusicTrack(r);render();});}catch(error){const target=document.querySelector("#musicSearchResults");if(target)target.innerHTML='<div class="empty">⚠️ Não foi possível realizar a busca agora.</div>';}});
+ document.querySelector("#musicSearchForm")?.addEventListener("submit",async e=>{e.preventDefault();const q=String(new FormData(e.target).get("query")||"").trim();if(q.length<2)return toast("Digite pelo menos 2 caracteres");const box=document.querySelector("#musicSearchResults");if(box)box.innerHTML='<div class="empty">🔎 Buscando…</div>';try{const results=await searchMusicArtist(q);const target=document.querySelector("#musicSearchResults");if(!target)return;if(!results.length){target.innerHTML='<div class="empty">Nenhuma prévia encontrada para essa busca.</div>';return;}target.innerHTML=results.map((r,i)=>`<div class="list-item"><div class="music-track-main">${r.cover?`<img src="${esc(r.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(r.title)}</b><div class="muted">${esc(r.artist)} • Prévia oficial de 30s</div></div></div><div class="actions"><button class="btn" data-search-preview="${i}">▶ Prévia</button><button class="btn primary" data-search-youtube="${i}">🎬 YouTube</button></div></div>`).join("");target.querySelectorAll("[data-search-preview]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchPreview)];musicPreviewTrack=r;ensureMusicAudio();musicAudio.src=r.url;musicAudio.load();try{await musicAudio.play();}catch(e){toast("Toque novamente para ouvir a prévia");}updateMusicUI();updateMediaSession();});target.querySelectorAll("[data-search-youtube]").forEach(btn=>btn.onclick=()=>{const r=results[Number(btn.dataset.searchYoutube)];const q=encodeURIComponent(`${r.artist} ${r.title}`);window.open(`https://www.youtube.com/results?search_query=${q}`,"_blank","noopener");toast("🎬 Escolha no YouTube a versão completa e copie o link para + Link");});}catch(error){const target=document.querySelector("#musicSearchResults");if(target)target.innerHTML='<div class="empty">⚠️ Não foi possível realizar a busca agora.</div>';}});
  document.querySelectorAll("[data-music-playlist]").forEach(b=>b.onclick=async()=>{const p=musicPlaylists.find(x=>String(x.id)===String(b.dataset.musicPlaylist));const ids=(p?.trackIds||[]).filter(id=>musicTracks.some(t=>String(t.id)===String(id)));if(!ids.length)return toast("Essa playlist ainda está vazia");await playMusicTrack(musicTracks.find(t=>String(t.id)===String(ids[0])),ids,0);});
 }
 function cleanupYouTubePlayer(){if(youtubePlayer){try{youtubePlayer.pauseVideo?.();youtubePlayer.destroy?.();}catch(e){} youtubePlayer=null;}}
-function render(){if(youtubePlayer)cleanupYouTubePlayer();if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}app.innerHTML=layout();bind()}
+function render(){
+ if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}
+ const persistentDock=document.querySelector("#musicDock");
+ app.innerHTML=layout();
+ if(persistentDock){const freshDock=document.querySelector("#musicDock");if(freshDock)freshDock.replaceWith(persistentDock);}
+ bind();
+ syncMusicDock();
+}
 window.addEventListener("beforeinstallprompt", e=>{
  e.preventDefault();
  deferredInstallPrompt=e;
