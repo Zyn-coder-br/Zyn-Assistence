@@ -78,3 +78,18 @@ Observação: a busca de catálogo usada pelo Zyn fornece apenas prévias. Para 
 - A navegação inferior permanece: Início, Planejar, Bem-estar, Finanças e Mais.
 - Player/dock de música continua acima da barra de navegação.
 - Novo object store IndexedDB `investmentAssets`, incluído na sincronização do Zyn Cloud.
+
+## V1.8.1 — Nova interface profissional
+- Nova linguagem visual aplicada aos módulos principais, seguindo as telas de referência aprovadas.
+- Painéis, cards, botões, listas, métricas e abas padronizados em roxo, branco e fundo escuro.
+- GYM redesenhado com semana, treino do dia, progresso e histórico visual.
+- Dieta redesenhada com resumo diário, refeições e lista de compras.
+- Finanças redesenhadas com visão do mês, saldo, contas fixas, movimentações, categorias e acesso à carteira.
+- Investimentos redesenhados com patrimônio, indicadores, carteira, distribuição e ações rápidas.
+- Música redesenhada com player, playlists, busca e biblioteca.
+- Início e Planejar receberam o mesmo sistema visual.
+- Mantida a navegação inferior exatamente com: **Início | Planejar | Bem-estar | Finanças | Mais**.
+- O player de música continua acima da barra inferior.
+- Investimentos continua dentro de Finanças, sem criar sexto botão.
+- Banco local/IndexedDB, Supabase Cloud, GYM, Dieta, Finanças, Investimentos e Zyn Music preservados.
+- Cache do Service Worker atualizado para V1.8.1.
