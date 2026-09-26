@@ -1,7 +1,11 @@
-# Assistente Zyn — V1.5.0 Finanças
+# Assistente Zyn — V1.5.1 Finanças
 
 ## Objetivo
 Transformar o módulo de Finanças em um painel prático para entender o dinheiro do mês e aumentar a chance de sobrar dinheiro.
+
+## Correção V1.5.1
+- Corrigido erro no filtro de transações que deixava a tela de Finanças vazia.
+- Banco de dados e funcionalidades da V1.5.0 preservados.
 
 ## Novidades
 - Planejamento financeiro mensal
