@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.7.1";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.7.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.7.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -121,6 +121,79 @@ async function searchMusicArtist(query){
 
 document.body.className = theme;
 const app = document.querySelector("#app");
+const APP_SESSION_KEY = "zyn-app-unlocked";
+let appUnlocked = sessionStorage.getItem(APP_SESSION_KEY) === "1";
+
+function markAppUnlocked(){
+  appUnlocked = true;
+  sessionStorage.setItem(APP_SESSION_KEY, "1");
+}
+function lockApp(){
+  appUnlocked = false;
+  sessionStorage.removeItem(APP_SESSION_KEY);
+}
+
+function authGateView(){
+  const email = currentUser()?.email || "";
+  return `<div class="auth-gate">
+    <section class="auth-card">
+      <div class="auth-brand"><div class="auth-logo">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><h1>Assistente Zyn</h1></div></div>
+      <div class="auth-welcome"><div class="eyebrow">ZYN CLOUD</div><h2>Bem-vindo de volta 👋</h2><p class="muted">Entre para acessar suas metas, finanças, GYM, alimentação, lembretes e o novo Zyn Music.</p></div>
+      <form id="loginGateForm" class="stack">
+        <div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="email" value="${esc(email)}" placeholder="seu@email.com"></div>
+        <div class="field"><label>Senha</label><input name="password" type="password" minlength="6" required autocomplete="current-password" placeholder="Mínimo de 6 caracteres"></div>
+        <button class="btn primary auth-submit" type="submit">Entrar no Zyn</button>
+        <button class="btn auth-signup" type="button" id="loginCreateAccount">Criar conta</button>
+      </form>
+      <p class="auth-note">🔒 A sessão de acesso permanece enquanto o aplicativo estiver aberto ou em segundo plano. Ao fechar o aplicativo, o Zyn pede login novamente.</p>
+      <div id="loginGateStatus" class="auth-status" aria-live="polite"></div>
+    </section>
+  </div>`;
+}
+
+function bindAuthGate(){
+  const form=document.querySelector("#loginGateForm");
+  const status=document.querySelector("#loginGateStatus");
+  form?.addEventListener("submit",async e=>{
+    e.preventDefault();
+    const f=new FormData(e.target);
+    const email=String(f.get("email")||"").trim();
+    const password=String(f.get("password")||"");
+    const button=e.submitter;
+    if(button){button.disabled=true;button.textContent="Entrando…";}
+    if(status)status.textContent="Conectando ao Zyn Cloud…";
+    try{
+      const {data,error}=await supabase.auth.signInWithPassword({email,password});
+      if(error)throw error;
+      authSession=data.session||null;
+      if(!authSession)throw new Error("Não foi possível iniciar a sessão.");
+      markAppUnlocked();
+      setCloudStatus("syncing","Conectado — sincronizando…");
+      await loadData();
+      await syncAll("login");
+      render();
+      toast("☁️ Login realizado");
+    }catch(err){
+      if(status)status.textContent="❌ "+(err?.message||"Não foi possível entrar.");
+      if(button){button.disabled=false;button.textContent="Entrar no Zyn";}
+    }
+  });
+  document.querySelector("#loginCreateAccount")?.addEventListener("click",async()=>{
+    const email=String(document.querySelector('#loginGateForm input[name="email"]')?.value||"").trim();
+    const password=String(document.querySelector('#loginGateForm input[name="password"]')?.value||"");
+    if(!email||password.length<6){if(status)status.textContent="Informe e-mail e uma senha de pelo menos 6 caracteres para criar a conta.";return;}
+    const btn=document.querySelector("#loginCreateAccount");if(btn){btn.disabled=true;btn.textContent="Criando…";}
+    try{
+      const {data,error}=await supabase.auth.signUp({email,password});
+      if(error)throw error;
+      authSession=data.session||null;
+      if(authSession){markAppUnlocked();await loadData();await syncAll("signup");render();toast("☁️ Conta criada");}
+      else if(status)status.textContent="Conta criada. Confira seu e-mail para confirmar o cadastro e depois entre.";
+    }catch(err){
+      if(status)status.textContent="❌ "+(err?.message||"Não foi possível criar a conta.");
+    }finally{if(btn){btn.disabled=false;btn.textContent="Criar conta";}}
+  });
+}
 
 function openDB(){
   return new Promise((resolve,reject)=>{
@@ -421,9 +494,9 @@ function earningForm(goalId){
 function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
 function currentUser(){return authSession?.user||null;}
 async function refreshAuth(){const {data,error}=await supabase.auth.getSession();if(error) throw error;authSession=data.session||null;return authSession;}
-async function signIn(email,password){const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error) throw error;authSession=data.session;await syncAll("login");render();toast("☁️ Conta conectada e dados sincronizados");}
-async function signUp(email,password){const {data,error}=await supabase.auth.signUp({email,password});if(error) throw error;authSession=data.session||null;if(data.session){await syncAll("signup");render();toast("☁️ Conta criada e sincronizada");}else{toast("Conta criada. Confira seu e-mail para confirmar o cadastro.");}}
-async function signOut(){await supabase.auth.signOut();authSession=null;setCloudStatus("offline","Sessão encerrada — dados locais continuam disponíveis");render();toast("Você saiu da conta. Seus dados locais foram preservados.");}
+async function signIn(email,password){const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error) throw error;authSession=data.session;if(!authSession) throw new Error("Não foi possível iniciar a sessão.");markAppUnlocked();await syncAll("login");render();toast("☁️ Conta conectada e dados sincronizados");}
+async function signUp(email,password){const {data,error}=await supabase.auth.signUp({email,password});if(error) throw error;authSession=data.session||null;if(data.session){markAppUnlocked();await syncAll("signup");render();toast("☁️ Conta criada e sincronizada");}else{toast("Conta criada. Confira seu e-mail para confirmar o cadastro.");}}
+async function signOut(){await supabase.auth.signOut();authSession=null;lockApp();setCloudStatus("offline","Sessão encerrada — entre novamente para acessar o Zyn");render();toast("Você saiu da conta. Seus dados locais foram preservados.");}
 function authForm(){
  const user=currentUser();
  const el=modal(`<div class="row"><h2>☁️ Zyn Cloud</h2><button class="btn" id="close">×</button></div>
@@ -435,7 +508,7 @@ function authForm(){
  el.querySelector("#authForm")?.addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);const email=String(f.get("email")||"").trim();const password=String(f.get("password")||"");const action=e.submitter?.value||"login";try{if(action==="signup")await signUp(email,password);else await signIn(email,password);closeModal(el);render();}catch(err){toast("❌ "+(err?.message||"Não foi possível autenticar"));}});
 }
 async function readLocalRecords(){
- const stores=["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals"];
+ const stores=["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","musicTracks","musicPlaylists","musicSettings"];
  const out=[];for(const name of stores){const rows=await all(name);for(const row of rows){if(row?.id!==undefined&&row?.id!==null){const stamp=row.updatedAt||new Date().toISOString();out.push({storeName:name,recordId:String(row.id),payload:row.updatedAt?row:{...row,updatedAt:stamp},updatedAt:stamp});}}}return out;
 }
 async function applyCloudRecord(row){
@@ -472,6 +545,7 @@ function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll
 function bindCloudEvents(){supabase.auth.onAuthStateChange((event,session)=>{authSession=session||null;if(session){scheduleSync();}else{setCloudStatus("offline","Entre na conta para sincronizar");}render();});window.addEventListener("online",()=>syncAll("online"));window.addEventListener("offline",()=>setCloudStatus("offline","Sem internet — alterações ficam no aparelho"));}
 
 async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");musicTracks=await all("musicTracks");musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
+}
 function bind(){
  document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
    if(!deferredInstallPrompt) return;
@@ -537,7 +611,7 @@ function bind(){
  document.querySelector("#musicSearchForm")?.addEventListener("submit",async e=>{e.preventDefault();const q=String(new FormData(e.target).get("query")||"").trim();if(q.length<2)return toast("Digite pelo menos 2 caracteres");const box=document.querySelector("#musicSearchResults");if(box)box.innerHTML='<div class="empty">🔎 Buscando…</div>';try{const results=await searchMusicArtist(q);const target=document.querySelector("#musicSearchResults");if(!target)return;if(!results.length){target.innerHTML='<div class="empty">Nenhuma prévia encontrada para essa busca.</div>';return;}target.innerHTML=results.map((r,i)=>`<div class="list-item"><div class="music-track-main">${r.cover?`<img src="${esc(r.cover)}" alt=""/>`:`<div class="mini-cover">🎵</div>`}<div><b>${esc(r.title)}</b><div class="muted">${esc(r.artist)} • Prévia</div></div></div><button class="btn primary" data-search-add="${i}">Adicionar</button></div>`).join("");target.querySelectorAll("[data-search-add]").forEach(btn=>btn.onclick=async()=>{const r=results[Number(btn.dataset.searchAdd)];await addMusicTrack(r);render();});}catch(error){const target=document.querySelector("#musicSearchResults");if(target)target.innerHTML='<div class="empty">⚠️ Não foi possível realizar a busca agora.</div>';}});
  document.querySelectorAll("[data-music-playlist]").forEach(b=>b.onclick=async()=>{const p=musicPlaylists.find(x=>String(x.id)===String(b.dataset.musicPlaylist));const ids=(p?.trackIds||[]).filter(id=>musicTracks.some(t=>String(t.id)===String(id)));if(!ids.length)return toast("Essa playlist ainda está vazia");await playMusicTrack(musicTracks.find(t=>String(t.id)===String(ids[0])),ids,0);});
 }
-function render(){app.innerHTML=layout();bind()}
+function render(){if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}app.innerHTML=layout();bind()}
 window.addEventListener("beforeinstallprompt", e=>{
  e.preventDefault();
  deferredInstallPrompt=e;
@@ -549,13 +623,18 @@ window.addEventListener("appinstalled", ()=>{
  toast("Assistente Zyn instalado");
 });
 (async()=>{
- await openDB();
- await loadData();
- try{await refreshAuth();}catch(error){console.warn("[Zyn Cloud] Sessão não pôde ser recuperada:",error);}
- bindCloudEvents();
- if(authSession){setCloudStatus("syncing","Conectado — sincronizando…");syncAll("startup");}
- else setCloudStatus("offline",navigator.onLine?"Entre na conta para sincronizar":"Sem internet — dados locais disponíveis");
- if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
- render();
- if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
+ try{
+   await openDB();
+   await loadData();
+   try{await refreshAuth();}catch(error){console.warn("[Zyn Cloud] Sessão não pôde ser recuperada:",error);}
+   bindCloudEvents();
+   if(appUnlocked && authSession){setCloudStatus("syncing","Conectado — sincronizando…");syncAll("startup");}
+   else if(appUnlocked) setCloudStatus("offline",navigator.onLine?"Entre na conta para sincronizar":"Sem internet — dados locais disponíveis");
+   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+   render();
+   if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
+ }catch(error){
+   console.error("[Zyn] Falha na inicialização:",error);
+   app.innerHTML=`<div class="error-screen"><div class="error-card"><div class="auth-logo">Z</div><h2>O Zyn encontrou um problema</h2><p>Não foi possível iniciar o aplicativo. Atualize a página e tente novamente.</p><button class="btn primary" onclick="location.reload()">↻ Tentar novamente</button></div></div>`;
+ }
 })();
