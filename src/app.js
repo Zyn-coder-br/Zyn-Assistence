@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.8.1";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.8.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.8.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -14,7 +14,7 @@ const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 8;
 let db;
 let currentView = "home";
-let theme = localStorage.getItem("zyn-theme") || "light";
+let theme = localStorage.getItem("zyn-theme") || "dark";
 let reminders = [];
 let goals = [];
 let earnings = [];
@@ -27,6 +27,10 @@ let musicTracks = [], musicPlaylists = [], musicSettings = null;
 let musicAudio = null, musicCurrentTrackId = null, musicQueue = [], musicQueueIndex = -1, musicSearchBusy = false;
 let musicPreviewTrack = null;
 let youtubePlayer = null, youtubeApiPromise = null;
+const app = document.querySelector("#app");
+let appUnlocked = true;
+function markAppUnlocked(){appUnlocked=true;localStorage.setItem("zyn-app-unlocked","true");}
+function lockApp(){appUnlocked=true;localStorage.setItem("zyn-app-unlocked","true");}
 
 function getYouTubeId(input){
   const value=String(input||"").trim();
@@ -161,168 +165,18 @@ async function addMusicTrack(track,playlistId=null){
 async function createMusicPlaylist(name){const clean=String(name||"").trim();if(!clean)return;await put("musicPlaylists",{name:clean,trackIds:[],createdAt:new Date().toISOString()});await loadData();render();toast("🎼 Playlist criada");}
 function updateMusicUI(){const track=musicPreviewTrack||currentMusicTrack(), title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn");if(title)title.textContent=track?.title||"Nenhuma música selecionada";if(artist)artist.textContent=track?.artist||"Escolha uma música ou adicione um link";if(cover){if(cover.tagName==="IMG"){cover.src=track?.cover||"";cover.style.display=track?.cover?"block":"none";}}if(play){const yt=isYouTubeTrack(track);play.textContent=yt?(youtubePlayer?.getPlayerState?.()===1?"⏸️":"▶️"):(musicAudio&&!musicAudio.paused?"⏸️":"▶️");}const status=document.querySelector("#musicStatus");if(status)status.textContent=musicPreviewTrack?"Prévia":(isYouTubeTrack(track)?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado"));}
 function musicView(){
-  const track=currentMusicTrack();
-  const playlists=musicPlaylists;
-  const youtube=isYouTubeTrack(track);
-  const cover=track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa" />`:`<div class="music-cover-placeholder" id="musicNowCover">🎧</div>`;
-  const playerMedia=``;
-  return `<div class="section-title"><div><h2>🎧 Zyn Music</h2><div class="muted">Player pessoal com áudio direto, links do YouTube e prévias de busca.</div></div><div class="actions"><button class="btn" id="musicPlaylistNew">+ Playlist</button><button class="btn primary" id="musicAddLink">+ Link</button></div></div>
-  <section class="music-player card full">${playerMedia}<div class="music-now">${cover}<div class="music-meta"><div class="eyebrow">TOCANDO AGORA</div><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música selecionada")}</h2><div class="muted" id="musicNowArtist">${esc(track?.artist||"Escolha uma música ou adicione um link")}</div><div class="tag" id="musicStatus">${youtube?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado")}</div></div></div>
-  ${youtube?``:`<input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Progresso da música"/><div class="music-times"><span id="musicCurrentTime">0:00</span><span id="musicDuration">0:00</span></div>`}<div class="music-controls"><button class="music-control" id="musicPrev" title="Anterior">⏮️</button><button class="music-control music-play" id="musicPlayBtn" title="Play/Pause">▶️</button><button class="music-control" id="musicNext" title="Próxima">⏭️</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><label class="music-volume">🔊 <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="${musicAudio?musicAudio.volume:1}"/></label></div></section>
-  <section class="card full"><div class="row"><h3>🔎 Buscar artista / banda</h3><span class="tag">prévia + YouTube</span></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">Busque uma música e <b>ouça a prévia antes de adicionar</b> à playlist.</div></div></section>
-  <section class="card full"><div class="row"><h3>🎼 Minhas playlists</h3><span class="tag">${playlists.length}</span></div><div class="music-playlists">${playlists.map(p=>`<button class="music-playlist" data-music-playlist="${p.id}"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></button>`).join("")||`<div class="empty">Crie sua primeira playlist.</div>`}</div></section>
-  <section class="card full"><div class="row"><h3>🎵 Biblioteca</h3><span class="tag">${musicTracks.length} faixa(s)</span></div><div class="stack">${musicTracks.slice().reverse().map(t=>`<div class="list-item music-track-item"><div class="music-track-main">${t.cover?`<img src="${esc(t.cover)}" alt=""/>`:`<div class="mini-cover">${isYouTubeTrack(t)?"▶️":"🎵"}</div>`}<div><b>${esc(t.title)}</b><div class="muted">${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":t.source==="youtube"?" • YouTube":""}</div></div></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||`<div class="empty">Nenhuma música ainda. Adicione um link direto ou um link do YouTube.</div>`}</div></section>`;
+ const playlists=musicPlaylists, track=currentMusicTrack();
+ const cover=track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa"/>`:`<div class="music-cover-placeholder" id="musicNowCover">♪</div>`;
+ const youtube=isYouTubeTrack(track);
+ return `<div class="module-page">
+  <div class="module-head"><div class="module-icon">♪</div><div class="module-head-copy"><h1>Música</h1><p>Suas playlists, sempre com você</p></div><button class="icon-btn">♡</button></div>
+  <div class="module-tabs"><button class="active">Início</button><button>Playlists</button><button>Favoritos</button><button>Recentes</button></div>
+  <section class="panel-card now-playing"><div class="now-playing-main">${cover}<div class="music-meta"><span class="eyebrow">TOCANDO AGORA</span><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música")}</h2><p id="musicNowArtist">${esc(track?.artist||"Escolha uma música ou adicione um link")}</p><span class="soft-tag" id="musicStatus">${youtube?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado")}</span></div></div>${youtube?``:`<input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1"/>`}<div class="music-controls"><button class="music-control" id="musicPrev">⏮</button><button class="music-control music-play" id="musicPlayBtn">▶</button><button class="music-control" id="musicNext">⏭</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><button class="btn primary" id="musicAddLink">+ Link</button></div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>🎼 Minhas playlists</h3><span>${playlists.length} playlists</span></div><button class="btn primary" id="musicPlaylistNew">+ Nova playlist</button></div><div class="modern-list">${playlists.map(p=>`<button class="modern-list-row music-playlist" data-music-playlist="${p.id}"><div class="row-icon">♪</div><div class="row-main"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></div><span class="row-arrow">›</span></button>`).join("")||'<div class="empty">Crie sua primeira playlist.</div>'}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>🔎 Buscar músicas</h3><span>Prévia + YouTube</span></div></div><form id="musicSearchForm" class="music-search"><input name="query" placeholder="Ex.: Coldplay, Bruno Mars, Queen..." autocomplete="off"/><button class="btn primary" type="submit">Buscar</button></form><div id="musicSearchResults" class="stack"><div class="empty">Busque uma música e ouça a prévia antes de adicionar.</div></div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>🎵 Biblioteca</h3><span>${musicTracks.length} faixa(s)</span></div></div><div class="modern-list">${musicTracks.slice().reverse().map(t=>`<div class="modern-list-row"><div class="row-icon">♪</div><div class="row-main"><b>${esc(t.title)}</b><span>${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":t.source==="youtube"?" • YouTube":""}</span></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||'<div class="empty">Nenhuma música adicionada ainda.</div>'}</div></section>
+ </div>`;
 }
-async function musicLinkForm(){
- const el=modal(`<div class="section-title"><h3>🔗 Adicionar música por link</h3><button class="btn" id="close">Fechar</button></div><form id="musicLinkForm" class="form-grid"><div class="field full"><label>Link da música</label><input name="url" type="url" placeholder="Cole um link de áudio ou do YouTube" required /><div class="muted field-help">YouTube: o vídeo será reproduzido pelo player oficial. Áudio direto: usa o player de áudio do Zyn.</div></div><div class="field"><label>Nome da música</label><input name="title" required /></div><div class="field"><label>Artista</label><input name="artist" /></div><div class="field"><label>Álbum</label><input name="album" /></div><div class="field"><label>Capa (URL opcional)</label><input name="cover" type="url" /></div><div class="field full"><label>Playlist</label><select name="playlist"><option value="">Sem playlist</option>${musicPlaylists.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div><div class="actions field full"><button class="btn primary" type="submit">Adicionar</button></div></form>`);
- el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#musicLinkForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await addMusicTrack({url:String(f.get("url")||"").trim(),title:f.get("title"),artist:f.get("artist"),album:f.get("album"),cover:f.get("cover"),source:"direct"},f.get("playlist")||null);closeModal(el);render();};
-}
-async function searchMusicArtist(query){
- musicSearchBusy=true;render();
- try{const url=`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&attribute=artistTerm&limit=20`;const response=await fetch(url);if(!response.ok)throw new Error("Busca indisponível");const json=await response.json();return (json.results||[]).filter(x=>x.previewUrl).map(x=>({title:x.trackName,artist:x.artistName,album:x.collectionName,cover:x.artworkUrl100?.replace("100x100bb","600x600bb")||"",url:x.previewUrl,source:"itunes-preview",duration:x.trackTimeMillis||0}));}finally{musicSearchBusy=false;}
-}
-
-document.body.className = theme;
-const app = document.querySelector("#app");
-const APP_SESSION_KEY = "zyn-app-unlocked";
-let appUnlocked = sessionStorage.getItem(APP_SESSION_KEY) === "1";
-
-function markAppUnlocked(){
-  appUnlocked = true;
-  sessionStorage.setItem(APP_SESSION_KEY, "1");
-}
-function lockApp(){
-  appUnlocked = false;
-  sessionStorage.removeItem(APP_SESSION_KEY);
-}
-
-function authGateView(){
-  const email = currentUser()?.email || "";
-  return `<div class="auth-gate">
-    <section class="auth-card">
-      <div class="auth-brand"><div class="auth-logo">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><h1>Assistente Zyn</h1></div></div>
-      <div class="auth-welcome"><div class="eyebrow">ZYN CLOUD</div><h2>Bem-vindo de volta 👋</h2><p class="muted">Entre para acessar suas metas, finanças, GYM, alimentação, lembretes e o novo Zyn Music.</p></div>
-      <form id="loginGateForm" class="stack">
-        <div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="email" value="${esc(email)}" placeholder="seu@email.com"></div>
-        <div class="field"><label>Senha</label><input name="password" type="password" minlength="6" required autocomplete="current-password" placeholder="Mínimo de 6 caracteres"></div>
-        <button class="btn primary auth-submit" type="submit">Entrar no Zyn</button>
-        <button class="btn auth-signup" type="button" id="loginCreateAccount">Criar conta</button>
-      </form>
-      <p class="auth-note">🔒 A sessão de acesso permanece enquanto o aplicativo estiver aberto ou em segundo plano. Ao fechar o aplicativo, o Zyn pede login novamente.</p>
-      <div id="loginGateStatus" class="auth-status" aria-live="polite"></div>
-    </section>
-  </div>`;
-}
-
-function bindAuthGate(){
-  const form=document.querySelector("#loginGateForm");
-  const status=document.querySelector("#loginGateStatus");
-  form?.addEventListener("submit",async e=>{
-    e.preventDefault();
-    const f=new FormData(e.target);
-    const email=String(f.get("email")||"").trim();
-    const password=String(f.get("password")||"");
-    const button=e.submitter;
-    if(button){button.disabled=true;button.textContent="Entrando…";}
-    if(status)status.textContent="Conectando ao Zyn Cloud…";
-    try{
-      const {data,error}=await supabase.auth.signInWithPassword({email,password});
-      if(error)throw error;
-      authSession=data.session||null;
-      if(!authSession)throw new Error("Não foi possível iniciar a sessão.");
-      markAppUnlocked();
-      setCloudStatus("syncing","Conectado — sincronizando…");
-      await loadData();
-      await syncAll("login");
-      render();
-      toast("☁️ Login realizado");
-    }catch(err){
-      if(status)status.textContent="❌ "+(err?.message||"Não foi possível entrar.");
-      if(button){button.disabled=false;button.textContent="Entrar no Zyn";}
-    }
-  });
-  document.querySelector("#loginCreateAccount")?.addEventListener("click",async()=>{
-    const email=String(document.querySelector('#loginGateForm input[name="email"]')?.value||"").trim();
-    const password=String(document.querySelector('#loginGateForm input[name="password"]')?.value||"");
-    if(!email||password.length<6){if(status)status.textContent="Informe e-mail e uma senha de pelo menos 6 caracteres para criar a conta.";return;}
-    const btn=document.querySelector("#loginCreateAccount");if(btn){btn.disabled=true;btn.textContent="Criando…";}
-    try{
-      const {data,error}=await supabase.auth.signUp({email,password});
-      if(error)throw error;
-      authSession=data.session||null;
-      if(authSession){markAppUnlocked();await loadData();await syncAll("signup");render();toast("☁️ Conta criada");}
-      else if(status)status.textContent="Conta criada. Confira seu e-mail para confirmar o cadastro e depois entre.";
-    }catch(err){
-      if(status)status.textContent="❌ "+(err?.message||"Não foi possível criar a conta.");
-    }finally{if(btn){btn.disabled=false;btn.textContent="Criar conta";}}
-  });
-}
-
-function openDB(){
-  return new Promise((resolve,reject)=>{
-    const request=indexedDB.open(DB_NAME,DB_VERSION);
-    request.onupgradeneeded=()=>{
-      const database=request.result;
-      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","investmentAssets","musicTracks","musicPlaylists","musicSettings","syncQueue","syncMeta"].forEach(store=>{
-        if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
-      });
-    };
-    request.onsuccess=()=>{db=request.result;resolve(db)};
-    request.onerror=()=>reject(request.error);
-  });
-}
-function store(name,mode="readonly"){return db.transaction(name,mode).objectStore(name)}
-function all(name){return new Promise((resolve,reject)=>{const r=store(name).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
-function put(name,data,options={}){return new Promise((resolve,reject)=>{
-  const payload={...(data||{})};
-  if(options.touch!==false && name!=="syncQueue" && name!=="syncMeta") payload.updatedAt=new Date().toISOString();
-  const r=store(name,"readwrite").put(payload);
-  r.onsuccess=()=>{if(options.touch!==false && typeof scheduleSync==="function")scheduleSync();resolve(r.result)};r.onerror=()=>reject(r.error)
-})}
-function remove(name,id){return new Promise(async(resolve,reject)=>{
-  const stamp=new Date().toISOString();
-  const r=store(name,"readwrite").delete(id);
-  r.onsuccess=async()=>{
-    try{ if(name!=="syncQueue" && name!=="syncMeta") await put("syncQueue",{storeName:name,recordId:String(id),updatedAt:stamp,deleted:true},{touch:false}); if(typeof scheduleSync==="function") scheduleSync(); resolve(); }
-    catch(e){reject(e)}
-  };
-  r.onerror=()=>reject(r.error)
-})}
-function money(value){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(value)||0)}
-function esc(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function todayISO(){return new Date().toISOString().slice(0,10)}
-function fmtDate(value){if(!value)return "Sem data";return new Date(value+"T12:00:00").toLocaleDateString("pt-BR")}
-function weekStart(date=new Date()){const d=new Date(date);const day=d.getDay();const diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);d.setHours(0,0,0,0);return d}
-function dateKey(date){return date.toISOString().slice(0,10)}
-function getCurrentWeekDays(){const start=weekStart();return Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return dateKey(d)})}
-function weekEarnings(goal){const days=getCurrentWeekDays();return earnings.filter(e=>days.includes(e.date)&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
-function goalProgress(goal){const amount=weekEarnings(goal);return Math.min(100,goal.target?amount/goal.target*100:0)}
-function dayAmount(goal,date=todayISO()){return earnings.filter(e=>e.date===date&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
-function activeGoal(){return goals.find(g=>g.active!==false)||goals[0]}
-function toast(message){const el=document.createElement("div");el.textContent=message;Object.assign(el.style,{position:"fixed",bottom:"82px",left:"50%",transform:"translateX(-50%)",background:"var(--text)",color:"var(--surface)",padding:"12px 17px",borderRadius:"12px",zIndex:40,boxShadow:"0 8px 30px #0003"});document.body.appendChild(el);setTimeout(()=>el.remove(),2500)}
-function uiIcon(name){const paths={home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',plan:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M7 10h10M8 14h3M14 14h2"/>',well:'<path d="M8 5v5M16 5v5M5 8h6M13 8h6M7 13c0 3 2 5 5 5s5-2 5-5"/>',finance:'<path d="M4 18V8M10 18V5M16 18v-7M21 18H3"/><path d="m17 7 3-3 2 2"/>',music:'<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="3"/><circle cx="16.5" cy="16" r="3"/>',assistant:'<path d="M7 8h10a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4H9l-4 3v-7a4 4 0 0 1-2-3v-1a4 4 0 0 1 4-4Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'};return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.home}</svg>`}
-function setView(view){currentView=view;render()}
-function toggleTheme(){theme=theme==="light"?"dark":"light";localStorage.setItem("zyn-theme",theme);document.body.className=theme;render()}
-function modal(content){const wrapper=document.createElement("div");wrapper.className="modal-backdrop";wrapper.innerHTML=`<div class="modal">${content}</div>`;document.body.appendChild(wrapper);return wrapper}
-function closeModal(el){el?.remove()}
-
-
-const DEFAULT_GYM=[
- {day:1,label:"Segunda",type:"gym",workout:"Peito + Tríceps"},
- {day:2,label:"Terça",type:"gym",workout:"Costas + Bíceps"},
- {day:3,label:"Quarta",type:"rest",workout:"Recuperação"},
- {day:4,label:"Quinta",type:"gym",workout:"Pernas"},
- {day:5,label:"Sexta",type:"gym",workout:"Ombros + Abdômen"},
- {day:6,label:"Sábado",type:"optional",workout:"Cardio / treino opcional"},
- {day:0,label:"Domingo",type:"rest",workout:"Descanso"}
-];
-const GYM_EX={
-"Peito + Tríceps":[["Supino máquina","Peito e tríceps","3","10–12","60–90s"],["Supino inclinado máquina","Peito superior","3","10–12","60–90s"],["Crucifixo máquina","Peitoral","3","12","60s"],["Tríceps na polia","Tríceps","3","10–12","60–90s"]],
-"Costas + Bíceps":[["Puxada frontal","Costas","3","10–12","60–90s"],["Remada máquina","Costas","3","10–12","60–90s"],["Pulldown","Costas","3","12","60s"],["Rosca bíceps máquina/polia","Bíceps","3","10–12","60s"]],
-"Pernas":[["Leg press","Quadríceps e glúteos","3","10–12","90s"],["Cadeira extensora","Quadríceps","3","12","60–90s"],["Mesa flexora","Posterior de coxa","3","12","60–90s"],["Panturrilha máquina","Panturrilhas","3","12–15","60s"]],
-"Ombros + Abdômen":[["Desenvolvimento máquina","Ombros","3","10–12","60–90s"],["Elevação lateral máquina/polia","Ombros","3","12","60s"],["Face pull/polia","Ombros posteriores","3","12–15","60s"],["Abdominal máquina","Abdômen","3","12–15","60s"]],
-"Cardio / treino opcional":[["Caminhada","Cardio leve","1","20–40 min","—"],["Bicicleta ergométrica","Cardio","1","20–30 min","—"]]
-};
 function gymWeek(){return DEFAULT_GYM.map(d=>gymPlans.find(x=>x.day===d.day)||d)}
 function gymToday(){const d=new Date().getDay();return gymWeek().find(x=>x.day===d)||DEFAULT_GYM[6]}
 function gymCount(){const ds=getCurrentWeekDays();return gymSessions.filter(x=>ds.includes(x.date)).length}
@@ -330,11 +184,15 @@ function gymGoal(){return gymProfile?.goal==="mass"?"Ganhar massa":gymProfile?.g
 
 function gymView(){
  const t=gymToday(), w=gymWeek(), c=gymCount();
- return `<div class="section-title"><h2>🏋️ Meu GYM</h2><button class="btn primary" id="gymProfile">⚙️ Meu perfil</button></div>
- <section class="card full gym-hero"><div class="row"><div><div class="eyebrow">TREINO DE HOJE</div><h2>${esc(t.workout)}</h2><div class="muted">${t.type==="rest"?"Recuperação":t.type==="optional"?"Sessão opcional":"Treino principal"} • Objetivo: ${gymGoal()}</div></div><span class="tag">${t.type==="rest"?"Descanso":"Hoje"}</span></div>
- <div class="actions" style="margin-top:15px">${t.type==="rest"?'<span class="muted">Hoje é recuperação. Uma caminhada leve pode ser feita se desejar.</span>':`<button class="btn primary" id="startGym">▶ Iniciar treino</button>`}<button class="btn" id="beachWalk">🌊 Caminhada/corrida</button></div></section>
- <div class="grid"><section class="card"><div class="row"><h3>📅 Minha semana</h3><button class="btn" id="editWeek">Editar</button></div><div class="stack">${w.map(d=>`<div class="list-item"><div><b>${d.label}</b><div class="muted">${esc(d.workout)}</div></div><span class="tag">${d.type==="gym"?"Treino":d.type==="optional"?"Opcional":"Descanso"}</span></div>`).join("")}</div></section>
- <section class="card"><h3>📊 Progresso</h3><div class="metric">${c}</div><div class="muted">sessões nesta semana</div><div class="progress"><div style="width:${Math.min(100,c/4*100)}%"></div></div><div class="row"><span class="muted">Objetivo</span><b>4–5 dias</b></div><div class="row" style="margin-top:10px"><span class="muted">Nível</span><b>${esc(gymProfile?.level||"Iniciante")}</b></div></section></div>`;
+ const todayLabel=new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"short"}).replace('.','');
+ return `<div class="module-page">
+  <div class="module-head"><div class="module-icon">🏋️</div><div class="module-head-copy"><h1>GYM</h1><p>Sua rotina de treinos organizada</p></div><button class="icon-btn module-profile" id="gymProfile">⚙</button></div>
+  <div class="module-tabs"><button class="active">Minha semana</button><button>Exercícios</button><button>Progresso</button><button>Histórico</button></div>
+  <div class="week-strip">${w.map((d,i)=>`<div class="week-day ${d.day===new Date().getDay()?"active":""}"><b>${d.label.slice(0,3)}</b><span>${i+1}</span></div>`).join("")}</div>
+  <section class="feature-card gym-feature"><div class="feature-top"><div><span class="eyebrow">TREINO DE HOJE</span><h2>${esc(t.workout)}</h2><p>${t.type==="rest"?"Recuperação":"Sessão principal"} • Objetivo: ${gymGoal()}</p></div><span class="soft-tag">Hoje</span></div><div class="feature-actions">${t.type==="rest"?'<span class="muted">Dia de recuperação. Uma caminhada leve é opcional.</span>':`<button class="btn primary" id="startGym">▶ Iniciar treino</button>`}<button class="btn" id="beachWalk">🌊 Caminhada/corrida</button></div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>📅 Minha semana</h3><span>Rotina programada</span></div><button class="btn" id="editWeek">Editar</button></div><div class="modern-list">${w.map(d=>`<div class="modern-list-row"><div class="row-icon">${d.type==="rest"?"◌":"✚"}</div><div class="row-main"><b>${d.label}</b><span>${esc(d.workout)}</span></div><span class="soft-tag">${d.type==="gym"?"Treino":d.type==="optional"?"Opcional":"Descanso"}</span></div>`).join("")}</div></section>
+  <div class="stat-grid three"><section class="stat-card"><span>Treinos</span><b>${c}</b><small>esta semana</small></section><section class="stat-card"><span>Meta</span><b>4–5</b><small>dias por semana</small></section><section class="stat-card"><span>Nível</span><b>${esc(gymProfile?.level||"Iniciante")}</b><small>${todayLabel}</small></section></div>
+ </div>`;
 }
 function gymWorkout(){
  const p=gymToday(), ex=GYM_EX[p.workout]||GYM_EX["Cardio / treino opcional"];
@@ -372,14 +230,17 @@ const FOOD_DEFAULT=[
 ];
 function foodView(){
  const p=foodProfile||{};
- return `<div class="section-title"><h2>🥗 Dietas</h2><button class="btn primary" id="foodProfile">⚙️ Meu perfil</button></div>
- <section class="card full food-hero"><div class="eyebrow">MINHAS DIETAS</div><h2>Comer melhor sem complicar</h2><p class="muted">3–4 refeições por dia, com foco em economia, praticidade e variedade.</p><div class="row"><span class="tag">Objetivo: perder gordura</span><span class="tag">Referência: ${money(p.budget||125)}/semana</span></div></section>
- <div class="grid"><section class="card"><h3>📋 Meu perfil</h3><div class="stack"><div class="row"><span class="muted">Refeições</span><b>${p.meals||"3–4"}</b></div><div class="row"><span class="muted">Cozinha</span><b>${p.cooking||"Sim + prático"}</b></div><div class="row"><span class="muted">Evitar</span><b>Coco</b></div></div></section>
- <section class="card"><h3>💡 Ideias</h3><div class="stack">${FOOD_DEFAULT.map(x=>`<div class="list-item"><div><b>${x[0]}</b><div class="muted">${x[1]}</div></div><span class="tag">${x[2]}</span></div>`).join("")}</div></section></div>
- <div class="section-title"><h2>📅 Semana</h2><button class="btn" id="generateMeals">Gerar semana</button></div>
- <div class="stack">${FOOD_DAYS.map(d=>`<section class="card full"><h3>${d}</h3><div class="stack">${(mealPlans.filter(x=>x.day===d).length?mealPlans.filter(x=>x.day===d):FOOD_DEFAULT.map((x,i)=>({slot:x[0],items:x[1],tag:x[2]}))).map(m=>`<div class="list-item"><div><b>${m.slot}</b><div class="muted">${m.items}</div></div><span class="tag">${m.tag}</span></div>`).join("")}</div></section>`).join("")}</div>
- <div class="section-title"><h2>🛒 Lista de compras</h2><button class="btn primary" id="newShopping">+ Item</button></div>
- <section class="card full"><div class="stack">${shoppingItems.map(x=>`<div class="list-item"><b>${esc(x.item)}</b><button class="btn" data-shop="${x.id}">${x.done?"✓ Comprado":"Marcar"}</button></div>`).join("")||'<div class="empty">Lista vazia. Gere a semana para criar uma lista inicial.</div>'}</div></section>`;
+ const dayMeals=mealPlans.filter(x=>x.day===FOOD_DAYS[(new Date().getDay()+6)%7]);
+ const meals=dayMeals.length?dayMeals:FOOD_DEFAULT.map(x=>({slot:x[0],items:x[1],tag:x[2]}));
+ return `<div class="module-page">
+  <div class="module-head"><div class="module-icon">🍴</div><div class="module-head-copy"><h1>Dieta</h1><p>Sua alimentação de forma simples e organizada</p></div><button class="btn primary" id="foodProfile">⚙ Meu perfil</button></div>
+  <div class="module-tabs"><button class="active">Hoje</button><button>Planejamento</button><button>Alimentos</button><button>Progresso</button></div>
+  <div class="week-strip compact">${FOOD_DAYS.map((d,i)=>`<div class="week-day ${(i+1)%7===new Date().getDay()?"active":""}"><b>${d.slice(0,3)}</b><span>${25+i}</span></div>`).join("")}</div>
+  <section class="feature-card food-feature"><span class="eyebrow">MINHA ALIMENTAÇÃO</span><h2>Comer melhor sem complicar</h2><p>3–4 refeições por dia, com foco em economia, praticidade e variedade.</p><div class="tag-row"><span class="soft-tag">Objetivo: perder gordura</span><span class="soft-tag">Referência: ${money(p.budget||125)}/semana</span></div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>📊 Resumo do dia</h3><span>Seu plano alimentar</span></div><span class="soft-tag">${meals.length} refeições</span></div><div class="stat-grid four"><div class="mini-stat"><b>1.450</b><span>kcal estimadas</span></div><div class="mini-stat"><b>65%</b><span>meta diária</span></div><div class="mini-stat"><b>1,5 L</b><span>água</span></div><div class="mini-stat"><b>${meals.length}</b><span>refeições</span></div></div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>🍽 Minhas refeições</h3><span>Hoje</span></div><button class="btn primary" id="generateMeals">+ Planejar semana</button></div><div class="modern-list meal-list">${meals.map((m,i)=>`<div class="modern-list-row"><div class="row-icon meal-icon">${["☕","🍎","🥗","🍲"][i%4]}</div><div class="row-main"><b>${esc(m.slot)}</b><span>${esc(m.items)}</span></div><span class="soft-tag">${esc(m.tag)}</span></div>`).join("")}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>🛒 Lista de compras</h3><span>${shoppingItems.filter(x=>!x.done).length} itens pendentes</span></div><button class="btn" id="newShopping">+ Item</button></div><div class="modern-list">${shoppingItems.map(x=>`<div class="modern-list-row"><div class="row-main"><b>${esc(x.item)}</b><span>${x.done?"Comprado":"Pendente"}</span></div><button class="btn ${x.done?"primary":""}" data-shop="${x.id}">${x.done?"✓":"Marcar"}</button></div>`).join("")||'<div class="empty">Gere a semana para criar sua lista de compras.</div>'}</div></section>
+ </div>`;
 }
 function foodProfileForm(){
  const p=foodProfile||{},el=modal(`<div class="row"><h2>Meu perfil alimentar</h2><button class="btn" id="close">×</button></div><form id="foodForm" class="stack"><div class="form-grid">
@@ -436,80 +297,27 @@ function moreMenu(){
 
 function layout(){
  return `<div class="shell">
-  <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="cloud-status offline" id="cloudStatus" title="Status da nuvem"><span></span>Entrar para sincronizar</button><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇️</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
+  <header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><div class="title">Assistente Zyn</div></div></div><div class="actions"><button class="cloud-status offline" id="cloudStatus" title="Status da nuvem"><span></span>Entrar para sincronizar</button><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header>
   <main id="content"></main>
  </div>
- <div id="musicDock" class="music-dock">
-   <div id="youtubePlayer" class="youtube-persistent-host"></div>
-   <div class="music-dock-main"><div id="dockCover" class="music-dock-cover">🎧</div><div class="music-dock-meta"><b id="dockTitle">Nenhuma música</b><span id="dockArtist">Zyn Music</span></div><button class="music-dock-btn" id="dockPrev" title="Anterior">⏮️</button><button class="music-dock-btn dock-play" id="dockPlay" title="Play/Pause">▶️</button><button class="music-dock-btn" id="dockNext" title="Próxima">⏭️</button><button class="music-dock-open" id="dockOpen" title="Abrir Zyn Music">🎧</button></div>
- </div>
- <nav class="nav"><div class="nav-inner">
-  <button data-view="home" class="${currentView==="home"?"active":""}">${uiIcon("home")}<span>Início</span></button>
-  <button data-view="planning" class="${["planning","reminders","goals"].includes(currentView)?"active":""}">${uiIcon("plan")}<span>Planejar</span></button>
-  <button data-view="wellness" class="${["wellness","gym","gymWorkout","food","habits"].includes(currentView)?"active":""}">${uiIcon("well")}<span>Bem-estar</span></button>
-  <button data-view="finance" class="${["finance","investments"].includes(currentView)?"active":""}">${uiIcon("finance")}<span>Finanças</span></button>
-  <button id="moreNav" class="${["music","assistant","investments"].includes(currentView)?"active":""}">${uiIcon("more")}<span>Mais</span></button>
- </div></nav>`;
+ <div id="musicDock" class="music-dock"><div id="youtubePlayer" class="youtube-persistent-host"></div><div class="music-dock-main"><div id="dockCover" class="music-dock-cover">♪</div><div class="music-dock-meta"><b id="dockTitle">Nenhuma música</b><span id="dockArtist">Zyn Music</span></div><button class="music-dock-btn" id="dockPrev">⏮</button><button class="music-dock-btn dock-play" id="dockPlay">▶</button><button class="music-dock-btn" id="dockNext">⏭</button><button class="music-dock-open" id="dockOpen">♪</button></div></div>
+ <nav class="nav"><div class="nav-inner"><button data-view="home" class="${currentView==="home"?"active":""}">${uiIcon("home")}<span>Início</span></button><button data-view="planning" class="${["planning","reminders","goals"].includes(currentView)?"active":""}">${uiIcon("plan")}<span>Planejar</span></button><button data-view="wellness" class="${["wellness","gym","gymWorkout","food","habits"].includes(currentView)?"active":""}">${uiIcon("well")}<span>Bem-estar</span></button><button data-view="finance" class="${["finance","investments"].includes(currentView)?"active":""}">${uiIcon("finance")}<span>Finanças</span></button><button id="moreNav" class="${["music","assistant"].includes(currentView)?"active":""}">${uiIcon("more")}<span>Mais</span></button></div></nav>`;
 }
-
 function homeView(){
- const goal=activeGoal();
- const amount=goal?weekEarnings(goal):0;
- const progress=goal?goalProgress(goal):0;
- const today=goal?dayAmount(goal):0;
- const pending=reminders.filter(r=>!r.done).length;
- const gymSessionsCount=gymCount();
- const shoppingPending=shoppingItems.filter(x=>!x.done).length;
- const finance=financeMonthData();
- const track=currentMusicTrack();
- return `<section class="home-hero"><div><div class="eyebrow">ZYN ASSISTENTE PESSOAL</div><h1>Olá, Ramon.</h1><p>Seu painel central para organizar o dia, cuidar da rotina e acompanhar o que importa.</p></div><div class="home-date">${new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</div></section>
- <section class="home-panels">
-  <button class="home-panel-card panel-plan" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><span class="panel-kicker">ORGANIZAÇÃO</span><h3>Planejamento</h3><p>Lembretes + Metas em um único painel.</p><div class="panel-stat"><b>${pending}</b><span>pendentes</span><i>${progress.toFixed(0)}% da meta</i></div></div><span class="panel-arrow">›</span></button>
-  <button class="home-panel-card panel-well" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><span class="panel-kicker">ROTINA & SAÚDE</span><h3>Bem-estar</h3><p>GYM + Dietas + Hábitos no mesmo espaço.</p><div class="panel-stat"><b>${gymSessionsCount}</b><span>sessões/semana</span><i>${shoppingPending} itens de compras</i></div></div><span class="panel-arrow">›</span></button>
-  <button class="home-panel-card panel-finance" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><span class="panel-kicker">CONTROLE</span><h3>Finanças</h3><p>Visão mensal do dinheiro que entra, sai e sobra.</p><div class="panel-stat"><b>${money(Math.max(0,finance.available))}</b><span>disponível</span><i>${money(finance.expense)} em despesas</i></div></div><span class="panel-arrow">›</span></button>
-  <button class="home-panel-card panel-investments" data-home-view="investments"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><span class="panel-kicker">PATRIMÔNIO</span><h3>Investimentos</h3><p>Carteira de ações, FIIs, ETFs e outros ativos.</p><div class="panel-stat"><b>${investmentSummary().count}</b><span>ativos</span><i>${money(investmentSummary().current)} em carteira</i></div></div><span class="panel-arrow">›</span></button>
-  <button class="home-panel-card panel-music" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><span class="panel-kicker">ENTRETENIMENTO</span><h3>Zyn Music</h3><p>Suas playlists, links e reprodução.</p><div class="panel-stat"><b>${musicTracks.length}</b><span>faixas</span><i>${track?esc(track.title):"Nada tocando"}</i></div></div><span class="panel-arrow">›</span></button>
-  <button class="home-panel-card panel-assistant" data-home-view="assistant"><span class="panel-icon">${uiIcon("assistant")}</span><div class="panel-copy"><span class="panel-kicker">INTELIGÊNCIA PESSOAL</span><h3>Zyn Assistente</h3><p>O centro para conversar e conectar seus painéis.</p><div class="panel-stat"><b>∞</b><span>possibilidades</span><i>Seu assistente pessoal</i></div></div><span class="panel-arrow">›</span></button>
- </section>
- <section class="home-summary-grid">
-  <section class="card home-summary"><div class="row"><div><span class="eyebrow">META ATIVA</span><h3>${goal?esc(goal.name):"Nenhuma meta criada"}</h3></div><span class="tag">${goal?money(amount)+" / "+money(goal.target):"Começar"}</span></div>${goal?`<div class="progress"><div style="width:${progress}%"></div></div><div class="row"><span class="muted">Hoje: ${money(today)}</span><button class="btn" id="homePlanning">Abrir planejamento</button></div>`:`<button class="btn primary" id="homePlanning">Abrir planejamento</button>`}</section>
-  <section class="card home-summary music-home-card"><div class="row"><div><span class="eyebrow">TOCANDO AGORA</span><h3>${esc(track?.title||"Sua música")}</h3><div class="muted">${esc(track?.artist||"Abra o Zyn Music para começar")}</div></div><button class="btn primary" id="homeMusic">Abrir</button></div></section>
- </section>`;
+ const goal=activeGoal(), amount=goal?weekEarnings(goal):0, progress=goal?goalProgress(goal):0, today=goal?dayAmount(goal):0, pending=reminders.filter(r=>!r.done).length, gymSessionsCount=gymCount(), finance=financeMonthData(), track=currentMusicTrack(), inv=investmentSummary();
+ return `<div class="module-page home-page"><section class="welcome-card"><div><span class="eyebrow">BEM-VINDO DE VOLTA</span><h1>Olá, Ramon 👋</h1><p>Seu painel pessoal para organizar o dia, cuidar da rotina e acompanhar o que importa.</p></div><span class="date-chip">${new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</span></section>
+ <div class="quick-grid"><button class="quick-card" data-home-view="planning"><span class="quick-icon">☷</span><b>Planejar</b><small>${pending} pendente(s)</small></button><button class="quick-card" data-home-view="gym"><span class="quick-icon">✚</span><b>GYM</b><small>${gymSessionsCount} sessão(ões)</small></button><button class="quick-card" data-home-view="finance"><span class="quick-icon">▣</span><b>Finanças</b><small>${money(Math.max(0,finance.available))} disponível</small></button><button class="quick-card" data-home-view="investments"><span class="quick-icon">↗</span><b>Investimentos</b><small>${money(inv.current)} em carteira</small></button><button class="quick-card" data-home-view="food"><span class="quick-icon">🍴</span><b>Dieta</b><small>Plano alimentar</small></button><button class="quick-card" data-home-view="music"><span class="quick-icon">♪</span><b>Música</b><small>${musicTracks.length} faixa(s)</small></button></div>
+ <section class="feature-card home-focus"><div><span class="eyebrow">META DA SEMANA</span><h2>${goal?esc(goal.name):"Crie sua primeira meta"}</h2><p>${goal?`${money(amount)} de ${money(goal.target)} nesta semana`:`Comece pelo Planejar para acompanhar sua meta.`}</p>${goal?`<div class="progress"><div style="width:${progress}%"></div></div><span class="muted">Hoje: ${money(today)} • ${progress.toFixed(0)}% concluído</span>`:`<button class="btn primary" id="homePlanning">Abrir Planejamento</button>`}</div><div class="focus-value">${goal?progress.toFixed(0)+"%":"—"}</div></section>
+ <div class="home-bottom-grid"><section class="panel-card"><div class="panel-heading"><div><h3>🎵 Tocando agora</h3><span>${esc(track?.artist||"Zyn Music")}</span></div><button class="btn" id="homeMusic">Abrir</button></div><b>${esc(track?.title||"Nenhuma música selecionada")}</b></section><section class="panel-card"><div class="panel-heading"><div><h3>📌 Resumo rápido</h3><span>Hoje</span></div></div><div class="mini-summary"><div><b>${pending}</b><span>Lembretes</span></div><div><b>${gymSessionsCount}</b><span>Treinos</span></div><div><b>${financeTransactions.length}</b><span>Lançamentos</span></div></div></section></div></div>`;
 }
-
 function planningView(){
- const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,5); const goal=activeGoal(); const amount=goal?weekEarnings(goal):0; const p=goal?goalProgress(goal):0;
- return `<div class="section-title"><div><span class="eyebrow">ORGANIZAÇÃO</span><h2>Planejamento</h2><div class="muted">Lembretes e metas agora vivem no mesmo painel.</div></div><div class="actions"><button class="btn" id="planningReminder">+ Lembrete</button><button class="btn primary" id="planningGoal">+ Meta</button></div></div><div class="grid planning-grid">
- <section class="card planning-hero"><div class="row"><div><span class="eyebrow">META ATIVA</span><h2>${goal?esc(goal.name):"Crie sua primeira meta"}</h2></div><span class="tag">${goal?p.toFixed(0)+"%":"Novo"}</span></div>${goal?`<div class="metric">${money(amount)}</div><div class="muted">de ${money(goal.target)} nesta semana</div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Meta diária ${money(goal.dailyTarget)}</span><button class="btn" id="planningGoals">Gerenciar metas</button></div>`:`<button class="btn primary" id="planningGoals">Criar meta</button>`}</section>
- <section class="card"><div class="row"><h3>${uiIcon("plan")} Próximos lembretes</h3><span class="tag">${reminders.filter(r=>!r.done).length}</span></div>${pending.length?`<div class="stack">${pending.map(r=>`<div class="list-item"><div><b>${esc(r.title)}</b><div class="muted">${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div></div><span class="tag warning">Pendente</span></div>`).join("")}</div>`:`<div class="empty">Nenhum lembrete pendente.</div>`}<button class="btn" id="planningReminders" style="margin-top:12px">Ver todos</button></section>
- </div>
- <div class="section-title"><h3>Visão rápida</h3></div><div class="grid"><section class="card"><div class="muted">Lembretes concluídos</div><div class="metric">${reminders.filter(r=>r.done).length}</div></section><section class="card"><div class="muted">Metas cadastradas</div><div class="metric">${goals.length}</div></section><section class="card"><div class="muted">Ganhos nesta semana</div><div class="metric">${money(earnings.filter(e=>getCurrentWeekDays().includes(e.date)).reduce((s,e)=>s+Number(e.amount||0),0))}</div></section></div>`;
+ const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,6),goal=activeGoal(),amount=goal?weekEarnings(goal):0,p=goal?goalProgress(goal):0;
+ return `<div class="module-page"><div class="module-head"><div class="module-icon">☷</div><div class="module-head-copy"><h1>Planejar</h1><p>Organize tarefas, metas e compromissos</p></div><button class="btn primary" id="planningGoal">+ Meta</button></div><div class="module-tabs"><button class="active">Hoje</button><button>Semana</button><button>Metas</button><button>Lembretes</button></div><section class="feature-card planning-feature"><div><span class="eyebrow">META ATIVA</span><h2>${goal?esc(goal.name):"Crie sua primeira meta"}</h2><p>${goal?`${money(amount)} de ${money(goal.target)} nesta semana`:"Defina uma meta para acompanhar seu progresso."}</p>${goal?`<div class="progress"><div style="width:${p}%"></div></div><span class="muted">${p.toFixed(0)}% concluído • meta diária ${money(goal.dailyTarget)}</span>`:`<button class="btn primary" id="planningGoals">Criar meta</button>`}</div><div class="focus-value">${goal?p.toFixed(0)+"%":"+"}</div></section><section class="panel-card"><div class="panel-heading"><div><h3>📅 Próximos lembretes</h3><span>${reminders.filter(r=>!r.done).length} pendentes</span></div><button class="btn" id="planningReminder">+ Lembrete</button></div><div class="modern-list">${pending.map(r=>`<div class="modern-list-row"><div class="row-icon">◷</div><div class="row-main"><b>${esc(r.title)}</b><span>${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</span></div><span class="soft-tag">Pendente</span></div>`).join("")||'<div class="empty">Nenhum lembrete pendente.</div>'}</div><button class="btn" id="planningReminders" style="margin-top:12px">Ver todos</button></section><div class="stat-grid three"><section class="stat-card"><span>Lembretes concluídos</span><b>${reminders.filter(r=>r.done).length}</b><small>total</small></section><section class="stat-card"><span>Metas cadastradas</span><b>${goals.length}</b><small>ativas</small></section><section class="stat-card"><span>Ganhos na semana</span><b>${money(earnings.filter(e=>getCurrentWeekDays().includes(e.date)).reduce((s,e)=>s+Number(e.amount||0),0))}</b><small>registrados</small></section></div></div>`;
 }
-
 function wellnessView(){
- const t=gymToday(); const c=gymCount(); const p=foodProfile||{}; const shopping=shoppingItems.filter(x=>!x.done).length;
- return `<div class="section-title"><div><span class="eyebrow">ROTINA & SAÚDE</span><h2>Bem-estar</h2><div class="muted">Tudo que ajuda você a cuidar do corpo e da rotina.</div></div></div><section class="wellness-hero card full"><div><span class="eyebrow">HOJE</span><h2>${esc(t.workout)}</h2><p class="muted">${t.type==="rest"?"Dia de recuperação":"Treino principal"} • ${c} sessão(ões) nesta semana</p></div><button class="btn primary" id="wellGym">Abrir GYM</button></section><div class="wellness-grid">
- <button class="wellness-card" data-well-view="gym"><span class="panel-icon">${uiIcon("well")}</span><span class="eyebrow">MOVIMENTO</span><h3>GYM</h3><p>Treino de hoje, semana, histórico e caminhada.</p><b>${c} sessões</b></button>
- <button class="wellness-card" data-well-view="food"><span class="panel-icon">${uiIcon("well")}</span><span class="eyebrow">ALIMENTAÇÃO</span><h3>Dietas</h3><p>Planejamento semanal, perfil e lista de compras.</p><b>${shopping} itens pendentes</b></button>
- <button class="wellness-card" data-well-view="habits"><span class="panel-icon">${uiIcon("plan")}</span><span class="eyebrow">CONSISTÊNCIA</span><h3>Hábitos</h3><p>Rotinas e hábitos serão acompanhados aqui.</p><b>${0} registros</b></button>
- </div><div class="card full"><div class="row"><div><span class="eyebrow">DIETAS</span><h3>${money(p.budget||125)}/semana de referência</h3><div class="muted">${p.meals||"3–4"} refeições por dia • foco em praticidade e variedade.</div></div><button class="btn" id="wellDiet">Abrir Dietas</button></div></div>`;
+ const t=gymToday(),c=gymCount(),shopping=shoppingItems.filter(x=>!x.done).length;
+ return `<div class="module-page"><div class="module-head"><div class="module-icon">✣</div><div class="module-head-copy"><h1>Bem-estar</h1><p>Cuide do corpo e da sua rotina</p></div></div><section class="feature-card wellness-feature"><div><span class="eyebrow">HOJE</span><h2>${esc(t.workout)}</h2><p>${t.type==="rest"?"Dia de recuperação":"Treino principal"} • ${c} sessão(ões) nesta semana</p></div><button class="btn primary" id="wellGym">Abrir GYM</button></section><div class="wellness-modern-grid"><button class="wellness-modern-card" data-well-view="gym"><span class="quick-icon">✚</span><span class="eyebrow">MOVIMENTO</span><h3>GYM</h3><p>Treino, semana e histórico.</p><b>${c} sessões</b></button><button class="wellness-modern-card" data-well-view="food"><span class="quick-icon">🍴</span><span class="eyebrow">ALIMENTAÇÃO</span><h3>Dieta</h3><p>Refeições, perfil e compras.</p><b>${shopping} itens pendentes</b></button><button class="wellness-modern-card" data-well-view="habits"><span class="quick-icon">✓</span><span class="eyebrow">CONSISTÊNCIA</span><h3>Hábitos</h3><p>Rotinas para manter constância.</p><b>Em preparação</b></button></div></div>`;
 }
-function awaitableHabitsCount(){return 0}
-
-function assistantView(){return `<div class="section-title"><div><span class="eyebrow">CENTRO DO ZYN</span><h2>Zyn Assistente</h2><div class="muted">Seu assistente pessoal para conectar organização, bem-estar, finanças e música.</div></div></div><section class="assistant-hero card full"><div class="assistant-orb">${uiIcon("assistant")}</div><div><span class="eyebrow">ASSISTENTE PESSOAL</span><h2>O que você quer organizar hoje?</h2><p class="muted">Esta área será o centro inteligente do Zyn. Por enquanto, use os painéis abaixo para acessar cada parte da sua rotina.</p></div></section><div class="assistant-actions"><button class="home-panel-card" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><h3>Planejamento</h3><p>Lembretes e metas.</p></div></button><button class="home-panel-card" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><h3>Bem-estar</h3><p>GYM, Dietas e Hábitos.</p></div></button><button class="home-panel-card" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><h3>Finanças</h3><p>Seu controle financeiro.</p></div></button><button class="home-panel-card" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><h3>Zyn Music</h3><p>Seu player pessoal.</p></div></button></div>`}
-
-function remindersView(){
- return `<div class="section-title"><h2>Lembretes</h2><button class="btn primary" id="newReminder">+ Novo</button></div><div class="stack">${reminders.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(r=>`<div class="list-item ${r.done?"done":""}"><div><b>${esc(r.title)}</b><div class="muted">${esc(r.category||"Geral")} • ${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div>${r.notes?`<div class="muted">${esc(r.notes)}</div>`:""}</div><div class="actions"><button class="btn" data-reminder-done="${r.id}">${r.done?"↩":"✓"}</button><button class="btn" data-reminder-edit="${r.id}">✎</button><button class="btn danger" data-reminder-delete="${r.id}">×</button></div></div>`).join("")||`<div class="empty">Você ainda não cadastrou lembretes.</div>`}</div>`;
-}
-
-function goalsView(){
- return `<div class="section-title"><h2>Metas</h2><button class="btn primary" id="newGoal">+ Nova meta</button></div>
- <div class="stack">${goals.map(g=>{const amount=weekEarnings(g);const p=goalProgress(g);return `<section class="card full"><div class="row"><h3>🎯 ${esc(g.name)}</h3><span class="tag">${g.active===false?"Inativa":"Ativa"}</span></div><div class="row"><div><div class="metric">${money(amount)}</div><div class="muted">de ${money(g.target)} na semana</div></div><div style="text-align:right"><div class="metric">${p.toFixed(1)}%</div><div class="muted">concluído</div></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Diária: ${money(g.dailyTarget)}</span><span class="muted">Hoje: ${money(dayAmount(g))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(g,d);const hit=val>=g.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div><div class="actions" style="margin-top:15px"><button class="btn primary" data-goal-earning="${g.id}">+ Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">Editar</button><button class="btn danger" data-goal-delete="${g.id}">Excluir</button></div></section>`}).join("")||`<div class="empty">Nenhuma meta cadastrada. Crie sua primeira meta semanal.</div>`}</div>`;
-}
-
-
-function monthKey(date=todayISO()){ return String(date).slice(0,7); }
-function financeMonthLabel(key=monthKey()){ const [y,m]=key.split("-"); return new Date(Number(y),Number(m)-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}); }
 function financeMonthData(key=monthKey()){
  const tx=financeTransactions.filter(x=>String(x.date||"").slice(0,7)===key);
  const income=tx.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount||0),0);
@@ -564,56 +372,32 @@ function investmentForm(existing={}){
 }
 function investmentsView(){
  const s=investmentSummary();
- const allocation={}; investmentAssets.forEach(x=>{const v=Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0); const k=investmentTypeLabel(x.type); allocation[k]=(allocation[k]||0)+v;});
+ const allocation={}; investmentAssets.forEach(x=>{const v=Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0);const k=investmentTypeLabel(x.type);allocation[k]=(allocation[k]||0)+v;});
  const alloc=Object.entries(allocation).sort((a,b)=>b[1]-a[1]);
- return `<div class="section-title"><div><span class="eyebrow">FINANÇAS • INVESTIMENTOS</span><h2>Carteira de investimentos</h2><div class="muted">Acompanhe ações, FIIs, ETFs e outros ativos em um único painel.</div></div><div class="actions"><button class="btn" id="backFinance">← Finanças</button><button class="btn primary" id="investmentAdd">+ Investimento</button></div></div>
- <section class="investment-hero"><div><span class="eyebrow">PATRIMÔNIO INVESTIDO</span><div class="investment-total">${money(s.current)}</div><div class="muted">Valor atual estimado da carteira</div></div><div class="investment-hero-side"><span class="tag ${s.result>=0?"success":"danger"}">${s.result>=0?"▲":"▼"} ${money(Math.abs(s.result))} (${s.returnPct.toFixed(1)}%)</span><div class="muted">resultado sobre o custo</div></div></section>
- <div class="investment-metrics">
-  <section class="card"><div class="muted">Capital aplicado</div><div class="metric">${money(s.invested)}</div></section>
-  <section class="card"><div class="muted">Valor atual</div><div class="metric">${money(s.current)}</div></section>
-  <section class="card"><div class="muted">Proventos</div><div class="metric">${money(s.dividends)}</div></section>
-  <section class="card"><div class="muted">Ativos</div><div class="metric">${s.count}</div></section>
- </div>
- <div class="investment-columns">
-  <section class="card"><div class="row"><div><span class="eyebrow">CARTEIRA</span><h3>Meus ativos</h3></div><span class="tag">${s.count} ${s.count===1?"ativo":"ativos"}</span></div>
-   ${investmentAssets.length?`<div class="investment-list">${investmentAssets.map(x=>{const cost=Number(x.quantity||0)*Number(x.avgPrice||0),cur=Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0),r=cur-cost;return `<div class="investment-row"><div class="investment-symbol">${esc(x.ticker||"?")}</div><div class="investment-main"><b>${esc(x.name||"Sem nome")}</b><span>${investmentTypeLabel(x.type)} • ${Number(x.quantity||0).toLocaleString("pt-BR")} cotas</span></div><div class="investment-value"><b>${money(cur)}</b><span class="${r>=0?"positive":"negative"}">${r>=0?"+":""}${money(r)}</span></div><div class="investment-actions"><button class="btn" data-invest-edit="${x.id}">Editar</button><button class="btn danger" data-invest-delete="${x.id}">Excluir</button></div></div>`}).join("")}</div>`:`<div class="investment-empty"><div class="investment-empty-icon">◈</div><h3>Sua carteira começa aqui</h3><p>Cadastre seu primeiro ativo para acompanhar patrimônio, resultado e distribuição.</p><button class="btn primary" id="investmentEmptyAdd">Adicionar investimento</button></div>`}
+ return `<div class="module-page investments-page">
+  <div class="module-head"><div class="module-icon chart-icon">↗</div><div class="module-head-copy"><span class="eyebrow">FINANÇAS</span><h1>Investimentos</h1><p>Acompanhe sua carteira e faça seu patrimônio crescer</p></div><button class="icon-btn">♡</button></div>
+  <div class="module-tabs"><button class="active">Visão Geral</button><button>Carteira</button><button>Ações</button><button>FIIs</button><button>Metas</button></div>
+  <section class="investment-modern-hero"><div><span class="eyebrow">PATRIMÔNIO TOTAL</span><strong>${money(s.current)}</strong><span>Valor atual estimado da carteira</span><div class="result-pill ${s.result>=0?"positive":"negative"}">${s.result>=0?"+":"-"}${money(Math.abs(s.result))} • ${s.returnPct.toFixed(2)}%</div></div><div class="fake-sparkline">╱╲╱╲╱╲╱╲╱</div></section>
+  <div class="stat-grid four investment-stats"><div class="mini-stat"><span>💰 Aportes</span><b>${money(s.invested)}</b><small>capital aplicado</small></div><div class="mini-stat"><span>📈 Rendimentos</span><b>${money(Math.max(0,s.result))}</b><small>resultado</small></div><div class="mini-stat"><span>💹 Lucro/Prejuízo</span><b>${s.result>=0?"+":"-"}${money(Math.abs(s.result))}</b><small>${s.returnPct.toFixed(2)}%</small></div><div class="mini-stat"><span>💵 Proventos</span><b>${money(s.dividends)}</b><small>recebidos</small></div></div>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Minha carteira</h3><span>${s.count} ativos cadastrados</span></div><button class="btn primary" id="investmentAdd">+ Adicionar ativo</button></div>
+   ${investmentAssets.length?`<div class="investment-modern-list">${investmentAssets.map(x=>{const cost=Number(x.quantity||0)*Number(x.avgPrice||0),cur=Number(x.quantity||0)*Number(x.currentPrice||x.avgPrice||0),r=cur-cost,pct=cost?r/cost*100:0;return `<div class="investment-modern-row"><div class="asset-badge">${esc((x.ticker||"?").slice(0,4))}</div><div class="row-main"><b>${esc(x.ticker||x.name)}</b><span>${esc(x.name||"Sem nome")} • ${investmentTypeLabel(x.type)}</span></div><div class="asset-number"><b>${money(cur)}</b><span class="${r>=0?"positive":"negative"}">${r>=0?"+":""}${pct.toFixed(1)}%</span></div><div class="actions"><button class="btn" data-invest-edit="${x.id}">Editar</button><button class="btn danger" data-invest-delete="${x.id}">×</button></div></div>`}).join("")}</div>`:`<div class="investment-empty"><div class="investment-empty-icon">↗</div><h3>Sua carteira começa aqui</h3><p>Cadastre seu primeiro ativo para acompanhar patrimônio, resultado e distribuição.</p><button class="btn primary" id="investmentEmptyAdd">Adicionar investimento</button></div>`}
   </section>
-  <section class="card"><div class="row"><div><span class="eyebrow">DISTRIBUIÇÃO</span><h3>Alocação da carteira</h3></div></div>
-   ${alloc.length?`<div class="allocation-list">${alloc.map(([k,v])=>{const pct=s.current?v/s.current*100:0;return `<div class="allocation-item"><div class="row"><b>${esc(k)}</b><span>${pct.toFixed(0)}%</span></div><div class="progress"><div style="width:${Math.min(100,pct)}%"></div></div><div class="muted">${money(v)}</div></div>`}).join("")}</div>`:`<div class="empty">Cadastre ativos para visualizar a distribuição.</div>`}
-  </section>
- </div>
- <section class="card full investment-note"><div class="row"><div><span class="eyebrow">ATENÇÃO</span><h3>Preços são informados por você</h3><div class="muted">O Zyn não consulta cotação em tempo real nesta versão. Atualize o preço atual quando quiser para manter o painel fiel à sua carteira.</div></div><span class="tag">Controle pessoal</span></div></section>`;
+  <div class="investment-bottom-grid"><section class="panel-card"><div class="panel-heading"><div><h3>Distribuição</h3><span>Alocação da carteira</span></div></div>${alloc.length?`<div class="allocation-list">${alloc.map(([k,v])=>{const pct=s.current?v/s.current*100:0;return `<div class="allocation-item"><div class="row"><b>${esc(k)}</b><span>${pct.toFixed(0)}%</span></div><div class="progress"><div style="width:${Math.min(100,pct)}%"></div></div><small>${money(v)}</small></div>`}).join("")}</div>`:`<div class="empty">Cadastre ativos para visualizar a distribuição.</div>`}</section><section class="panel-card"><div class="panel-heading"><div><h3>Próximas ações</h3><span>Gestão da carteira</span></div></div><div class="modern-list"><div class="modern-list-row"><div class="row-icon">＋</div><div class="row-main"><b>Adicionar aporte</b><span>Registre uma nova compra</span></div></div><div class="modern-list-row"><div class="row-icon">↻</div><div class="row-main"><b>Atualizar preços</b><span>Os preços são informados por você</span></div></div></div></section></div>
+ </div>`;
 }
-
 function financeView(){
  const key=financeProfile?.selectedMonth||monthKey(), d=financeMonthData(key), cats=financeCategoryTotals(key);
- const plannedIncome=Number(financeProfile?.monthlyIncome||0);
- const fixed=financeBills.filter(x=>x.active!==false).reduce((a,x)=>a+Number(x.amount||0),0);
- const limit=Math.max(0,(plannedIncome||d.income)-fixed-(financeProfile?.monthlySavingsTarget||0));
- return `<div class="section-title"><h2>💰 Finanças</h2><div class="actions"><button class="btn" id="financeProfileBtn">⚙️ Planejamento</button><button class="btn primary" id="financeAdd">+ Lançamento</button></div></div>
- <section class="finance-investment-banner"><div class="finance-investment-icon">${uiIcon("finance")}</div><div><span class="eyebrow">PATRIMÔNIO</span><h3>Investimentos</h3><p>Carteira de ações, FIIs, ETFs e outros ativos.</p></div><button class="btn primary" id="openInvestments">Abrir carteira</button></section>
- <section class="hero"><div class="eyebrow" style="color:#e8e2ff">CONTROLE FINANCEIRO</div><h2>Faça o dinheiro sobrar.</h2><p>O Zyn separa o que entrou, o que já está comprometido e o que ainda pode ser gasto.</p></section>
- <section class="card full"><div class="row"><div><div class="eyebrow">MÊS</div><h3 style="text-transform:capitalize">${esc(financeMonthLabel(key))}</h3></div><input id="financeMonth" type="month" value="${key}" style="max-width:170px"></div></section>
- <div class="grid">
-  <section class="card"><div class="muted">Entradas</div><div class="metric">${money(d.income)}</div><div class="muted">Registradas no mês</div></section>
-  <section class="card"><div class="muted">Despesas</div><div class="metric">${money(d.expense)}</div><div class="muted">Gastos lançados</div></section>
-  <section class="card"><div class="muted">Contas fixas</div><div class="metric">${money(d.billsTotal)}</div><div class="muted">${d.bills.length} conta(s) no mês</div></section>
-  <section class="card"><div class="muted">Pode sobrar</div><div class="metric">${money(Math.max(0,d.available))}</div><div class="muted">${d.available>=0?"Dentro do planejamento":"Orçamento estourado"}</div></section>
- </div>
- <section class="card full"><div class="row"><h3>🎯 Plano para sobrar dinheiro</h3><span class="tag">${financeProfile?.monthlySavingsTarget?money(financeProfile.monthlySavingsTarget)+" alvo":"Defina um alvo"}</span></div>
-  <div class="row"><div><div class="metric">${money(d.saved)}</div><div class="muted">guardado no mês</div></div><div style="text-align:right"><div class="metric">${money(Math.max(0,(financeProfile?.monthlySavingsTarget||0)-d.saved))}</div><div class="muted">faltam para a meta</div></div></div>
-  <div class="progress"><div style="width:${financeProfile?.monthlySavingsTarget?Math.min(100,d.saved/financeProfile.monthlySavingsTarget*100):0}%"></div></div>
-  <p class="muted" style="margin-top:12px">Limite sugerido de gastos variáveis: <b>${money(limit)}</b> no mês, antes dos lançamentos variáveis.</p>
- </section>
- <section class="card full"><div class="row"><h3>📌 Contas fixas</h3><button class="btn" id="financeBill">+ Conta</button></div>
-  <div class="stack">${financeBills.filter(x=>x.active!==false).map(x=>`<div class="list-item"><div><b>${esc(x.name)}</b><div class="muted">Vencimento: ${fmtDate(x.dueDate)}</div></div><b>${money(x.amount)}</b></div>`).join("")||`<div class="empty">Cadastre aluguel, internet, telefone, parcelas e outras contas recorrentes.</div>`}</div>
- </section>
- <section class="card full"><div class="row"><h3>📒 Últimos lançamentos</h3><span class="tag">${d.tx.length} no mês</span></div>
-  <div class="stack">${d.tx.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,12).map(x=>`<div class="list-item"><div><b>${esc(x.description)}</b><div class="muted">${esc(x.category||"Outros")} • ${fmtDate(x.date)}${x.account?" • "+esc(x.account):""}</div></div><div style="text-align:right"><b class="${x.type==="expense"?"danger-text":""}">${x.type==="expense"?"−":"+"}${money(x.amount)}</b></div></div>`).join("")||`<div class="empty">Nenhum lançamento neste mês.</div>`}</div>
- </section>
- <section class="card full"><h3>📊 Onde o dinheiro está indo</h3>
-  ${cats.length?`<div class="stack">${cats.slice(0,8).map(([c,v])=>`<div><div class="row"><span>${esc(c)}</span><b>${money(v)}</b></div><div class="progress"><div style="width:${d.expense?Math.min(100,v/d.expense*100):0}%"></div></div></div>`).join("")}</div>`:`<div class="empty">Registre despesas para o Zyn mostrar os maiores pontos de consumo.</div>`}
- </section>
+ const plannedIncome=Number(financeProfile?.monthlyIncome||0);const fixed=financeBills.filter(x=>x.active!==false).reduce((a,x)=>a+Number(x.amount||0),0);const limit=Math.max(0,(plannedIncome||d.income)-fixed-(financeProfile?.monthlySavingsTarget||0));
+ return `<div class="module-page finance-page">
+  <div class="module-head"><div class="module-icon">▣</div><div class="module-head-copy"><h1>Finanças</h1><p>Controle seus cartões e acompanhe seus gastos</p></div><button class="icon-btn" id="financeProfileBtn">⚙</button></div>
+  <div class="module-tabs"><button class="active">Visão Geral</button><button>Cartões</button><button>Gastos</button><button>Metas</button></div>
+  <section class="finance-investment-card"><div class="investment-small-icon">↗</div><div class="row-main"><span class="eyebrow">PATRIMÔNIO</span><h3>Investimentos</h3><p>Carteira de ações, FIIs, ETFs e outros ativos.</p></div><button class="btn primary" id="openInvestments">Abrir carteira</button></section>
+  <section class="finance-summary-card"><div><span class="eyebrow">SALDO DISPONÍVEL</span><strong>${money(Math.max(0,d.available))}</strong><span>${d.available>=0?"Dentro do planejamento":"Orçamento estourado"}</span></div><div class="summary-orb">${d.available>=0?"✓":"!"}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Visão do mês</h3><span class="month-label">${esc(financeMonthLabel(key))}</span></div><input id="financeMonth" type="month" value="${key}"></div><div class="stat-grid four"><div class="mini-stat"><span>Entradas</span><b>${money(d.income)}</b><small>registradas</small></div><div class="mini-stat"><span>Despesas</span><b>${money(d.expense)}</b><small>gastos</small></div><div class="mini-stat"><span>Contas fixas</span><b>${money(d.billsTotal)}</b><small>${d.bills.length} conta(s)</small></div><div class="mini-stat"><span>Pode sobrar</span><b>${money(Math.max(0,d.available))}</b><small>saldo</small></div></div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>🎯 Plano para sobrar dinheiro</h3><span>Meta mensal de economia</span></div><span class="soft-tag">${financeProfile?.monthlySavingsTarget?money(financeProfile.monthlySavingsTarget)+" alvo":"Defina um alvo"}</span></div><div class="money-split"><div><b>${money(d.saved)}</b><span>guardado no mês</span></div><div><b>${money(Math.max(0,(financeProfile?.monthlySavingsTarget||0)-d.saved))}</b><span>faltam para a meta</span></div></div><div class="progress"><div style="width:${financeProfile?.monthlySavingsTarget?Math.min(100,d.saved/financeProfile.monthlySavingsTarget*100):0}%"></div></div><p class="muted">Limite sugerido de gastos variáveis: <b>${money(limit)}</b> no mês.</p></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>📌 Contas fixas</h3><span>${financeBills.filter(x=>x.active!==false).length} cadastradas</span></div><button class="btn" id="financeBill">+ Conta</button></div><div class="modern-list">${financeBills.filter(x=>x.active!==false).map(x=>`<div class="modern-list-row"><div class="row-icon">▣</div><div class="row-main"><b>${esc(x.name)}</b><span>Vencimento: ${fmtDate(x.dueDate)}</span></div><strong>${money(x.amount)}</strong></div>`).join("")||'<div class="empty">Cadastre suas contas recorrentes.</div>'}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Últimas movimentações</h3><span>${d.tx.length} no mês</span></div><button class="btn primary" id="financeAdd">+ Lançamento</button></div><div class="modern-list">${d.tx.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,8).map(x=>`<div class="modern-list-row"><div class="row-icon">${x.type==="expense"?"−":"＋"}</div><div class="row-main"><b>${esc(x.description)}</b><span>${esc(x.category||"Outros")} • ${fmtDate(x.date)}</span></div><strong class="${x.type==="expense"?"negative":"positive"}">${x.type==="expense"?"−":"+"}${money(x.amount)}</strong></div>`).join("")||'<div class="empty">Nenhuma movimentação neste mês.</div>'}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Gastos por categoria</h3><span>Onde o dinheiro está indo</span></div></div>${cats.length?`<div class="category-list">${cats.slice(0,8).map(([c,v])=>`<div class="category-row"><div><b>${esc(c)}</b><span>${money(v)}</span></div><div class="progress"><div style="width:${d.expense?Math.min(100,v/d.expense*100):0}%"></div></div></div>`).join("")}</div>`:'<div class="empty">Registre despesas para visualizar as categorias.</div>'}</section>
  </div>`;
 }
 function financeProfileForm(){
@@ -823,6 +607,7 @@ function bind(){
 }
 function cleanupYouTubePlayer(){if(youtubePlayer){try{youtubePlayer.pauseVideo?.();youtubePlayer.destroy?.();}catch(e){} youtubePlayer=null;}}
 function render(){
+ document.body.className=theme;
  if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}
  const persistentDock=document.querySelector("#musicDock");
  app.innerHTML=layout();
