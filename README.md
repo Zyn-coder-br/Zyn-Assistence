@@ -1,34 +1,25 @@
-# Assistente Zyn — V1.4.0
+# Assistente Zyn — V1.5.0 Finanças
+
+## Objetivo
+Transformar o módulo de Finanças em um painel prático para entender o dinheiro do mês e aumentar a chance de sobrar dinheiro.
 
 ## Novidades
-- Módulo de Metas funcional.
-- Meta semanal dividida automaticamente por 7 dias.
-- Valor diário calculado automaticamente.
-- Registro de ganhos por Uber e Entregas.
-- Progresso semanal e diário.
-- Visualização dos sete dias da semana.
-- Criação, edição e exclusão de metas.
-- Lembretes com cadastro, edição, exclusão e conclusão.
-- Dados armazenados localmente no IndexedDB.
-- Service Worker atualizado para V1.4.0.
+- Planejamento financeiro mensal
+- Renda fixa mensal
+- Meta mensal para guardar dinheiro
+- Lançamentos de entrada, despesa e dinheiro guardado
+- Categorias de gastos
+- Contas fixas com vencimento
+- Resumo mensal
+- Valor disponível estimado
+- Limite sugerido para gastos variáveis
+- Visão dos maiores grupos de despesas
+- Seleção de mês
+- Preservação de Metas/Lembretes/GYM/Comida
+- IndexedDB local, sem Supabase e sem Node.js
 
-## Publicação no GitHub Pages
-1. Extraia o ZIP.
-2. Envie os arquivos para o repositório.
-3. Mantenha `index.html` na raiz.
-4. Em Settings > Pages, selecione a branch e a pasta `/root`.
-5. Abra o endereço do GitHub Pages.
+## Como publicar
+Substitua os arquivos do repositório pelos arquivos desta pasta e mantenha o GitHub Pages apontando para a raiz.
 
-## Observações
-- A versão é local-first e não usa Supabase.
-- Os dados ficam no navegador/dispositivo.
-- Faça backup/exportação antes de limpar dados do navegador.
-- Notificações em segundo plano e alarmes exatos ainda precisam de uma etapa específica de testes.
-
-
-## GYM / Minha Rotina
-Perfil, divisão tradicional, semana editável, treino do dia, carga/repetições, sessões e caminhada/corrida.
-
-
-## Alimentação
-Perfil alimentar, 3–4 refeições, planejamento semanal, sugestões econômicas/práticas e lista de compras local.
+## Observação
+Esta versão é uma ferramenta de organização financeira pessoal e não substitui aconselhamento financeiro profissional.
