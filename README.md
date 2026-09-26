@@ -1,4 +1,4 @@
-# Assistente Zyn — V1.2.0
+# Assistente Zyn — V1.3.0
 
 ## Novidades
 - Módulo de Metas funcional.
@@ -10,7 +10,7 @@
 - Criação, edição e exclusão de metas.
 - Lembretes com cadastro, edição, exclusão e conclusão.
 - Dados armazenados localmente no IndexedDB.
-- Service Worker atualizado para V1.2.0.
+- Service Worker atualizado para V1.3.0.
 
 ## Publicação no GitHub Pages
 1. Extraia o ZIP.
@@ -24,3 +24,7 @@
 - Os dados ficam no navegador/dispositivo.
 - Faça backup/exportação antes de limpar dados do navegador.
 - Notificações em segundo plano e alarmes exatos ainda precisam de uma etapa específica de testes.
+
+
+## GYM / Minha Rotina
+Perfil, divisão tradicional, semana editável, treino do dia, carga/repetições, sessões e caminhada/corrida.
