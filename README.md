@@ -93,3 +93,7 @@ Observação: a busca de catálogo usada pelo Zyn fornece apenas prévias. Para 
 - Investimentos continua dentro de Finanças, sem criar sexto botão.
 - Banco local/IndexedDB, Supabase Cloud, GYM, Dieta, Finanças, Investimentos e Zyn Music preservados.
 - Cache do Service Worker atualizado para V1.8.1.
+
+
+## V1.8.2 — correção de inicialização
+Restauradas as funções centrais de IndexedDB, utilitários e funções de apoio que foram omitidas durante a fusão da interface da V1.8.1.
