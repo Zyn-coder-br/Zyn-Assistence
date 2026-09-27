@@ -121,3 +121,11 @@ Restauradas as funções centrais de IndexedDB, utilitários e funções de apoi
 
 ## V1.8.5
 Correção do player de músicas locais: arquivos importados do dispositivo agora são reproduzidos via Blob URL, usando o Blob armazenado no IndexedDB, mesmo sem URL HTTP.
+
+
+## V1.9.0 — Music playback stability
+- Queue follows the current library/favorites/recent tab or selected playlist.
+- Natural playback advances through the full queue and stops at the end instead of looping the first track.
+- Removed render-on-track-change to prevent list scroll resets and UI lag.
+- Reuses one audio element and revokes old Blob URLs to reduce memory pressure.
+- Media Session metadata/playback state stays active while paused; no app toast is generated for pause/play state.
