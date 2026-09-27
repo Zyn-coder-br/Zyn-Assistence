@@ -129,3 +129,8 @@ Correção do player de músicas locais: arquivos importados do dispositivo agor
 - Removed render-on-track-change to prevent list scroll resets and UI lag.
 - Reuses one audio element and revokes old Blob URLs to reduce memory pressure.
 - Media Session metadata/playback state stays active while paused; no app toast is generated for pause/play state.
+
+
+## V1.9.1
+- Mini-player exibido somente durante reprodução e fora da tela Música.
+- Janelas modais ficam acima do mini-player.
