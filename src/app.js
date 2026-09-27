@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.8.2";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.8.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.8.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -177,6 +177,184 @@ function musicView(){
   <section class="panel-card"><div class="panel-heading"><div><h3>🎵 Biblioteca</h3><span>${musicTracks.length} faixa(s)</span></div></div><div class="modern-list">${musicTracks.slice().reverse().map(t=>`<div class="modern-list-row"><div class="row-icon">♪</div><div class="row-main"><b>${esc(t.title)}</b><span>${esc(t.artist)}${t.source==="itunes-preview"?" • Prévia":t.source==="youtube"?" • YouTube":""}</span></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||'<div class="empty">Nenhuma música adicionada ainda.</div>'}</div></section>
  </div>`;
 }
+
+
+/* V1.8.1 HOTFIX — restored core IndexedDB/helpers accidentally omitted during UI merge. */
+function activeGoal(){return goals.find(g=>g.active!==false)||goals[0]}
+
+function all(name){return new Promise((resolve,reject)=>{const r=store(name).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
+
+function assistantView(){return `<div class="section-title"><div><span class="eyebrow">CENTRO DO ZYN</span><h2>Zyn Assistente</h2><div class="muted">Seu assistente pessoal para conectar organização, bem-estar, finanças e música.</div></div></div><section class="assistant-hero card full"><div class="assistant-orb">${uiIcon("assistant")}</div><div><span class="eyebrow">ASSISTENTE PESSOAL</span><h2>O que você quer organizar hoje?</h2><p class="muted">Esta área será o centro inteligente do Zyn. Por enquanto, use os painéis abaixo para acessar cada parte da sua rotina.</p></div></section><div class="assistant-actions"><button class="home-panel-card" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><h3>Planejamento</h3><p>Lembretes e metas.</p></div></button><button class="home-panel-card" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><h3>Bem-estar</h3><p>GYM, Dietas e Hábitos.</p></div></button><button class="home-panel-card" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><h3>Finanças</h3><p>Seu controle financeiro.</p></div></button><button class="home-panel-card" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><h3>Zyn Music</h3><p>Seu player pessoal.</p></div></button></div>`}
+
+function authGateView(){
+  const email = currentUser()?.email || "";
+  return `<div class="auth-gate">
+    <section class="auth-card">
+      <div class="auth-brand"><div class="auth-logo">Z</div><div><div class="eyebrow">ASSISTENTE PESSOAL</div><h1>Assistente Zyn</h1></div></div>
+      <div class="auth-welcome"><div class="eyebrow">ZYN CLOUD</div><h2>Bem-vindo de volta 👋</h2><p class="muted">Entre para acessar suas metas, finanças, GYM, alimentação, lembretes e o novo Zyn Music.</p></div>
+      <form id="loginGateForm" class="stack">
+        <div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="email" value="${esc(email)}" placeholder="seu@email.com"></div>
+        <div class="field"><label>Senha</label><input name="password" type="password" minlength="6" required autocomplete="current-password" placeholder="Mínimo de 6 caracteres"></div>
+        <button class="btn primary auth-submit" type="submit">Entrar no Zyn</button>
+        <button class="btn auth-signup" type="button" id="loginCreateAccount">Criar conta</button>
+      </form>
+      <p class="auth-note">🔒 A sessão de acesso permanece enquanto o aplicativo estiver aberto ou em segundo plano. Ao fechar o aplicativo, o Zyn pede login novamente.</p>
+      <div id="loginGateStatus" class="auth-status" aria-live="polite"></div>
+    </section>
+  </div>`;
+}
+
+function awaitableHabitsCount(){return 0}
+
+function bindAuthGate(){
+  const form=document.querySelector("#loginGateForm");
+  const status=document.querySelector("#loginGateStatus");
+  form?.addEventListener("submit",async e=>{
+    e.preventDefault();
+    const f=new FormData(e.target);
+    const email=String(f.get("email")||"").trim();
+    const password=String(f.get("password")||"");
+    const button=e.submitter;
+    if(button){button.disabled=true;button.textContent="Entrando…";}
+    if(status)status.textContent="Conectando ao Zyn Cloud…";
+    try{
+      const {data,error}=await supabase.auth.signInWithPassword({email,password});
+      if(error)throw error;
+      authSession=data.session||null;
+      if(!authSession)throw new Error("Não foi possível iniciar a sessão.");
+      markAppUnlocked();
+      setCloudStatus("syncing","Conectado — sincronizando…");
+      await loadData();
+      await syncAll("login");
+      render();
+      toast("☁️ Login realizado");
+    }catch(err){
+      if(status)status.textContent="❌ "+(err?.message||"Não foi possível entrar.");
+      if(button){button.disabled=false;button.textContent="Entrar no Zyn";}
+    }
+  });
+  document.querySelector("#loginCreateAccount")?.addEventListener("click",async()=>{
+    const email=String(document.querySelector('#loginGateForm input[name="email"]')?.value||"").trim();
+    const password=String(document.querySelector('#loginGateForm input[name="password"]')?.value||"");
+    if(!email||password.length<6){if(status)status.textContent="Informe e-mail e uma senha de pelo menos 6 caracteres para criar a conta.";return;}
+    const btn=document.querySelector("#loginCreateAccount");if(btn){btn.disabled=true;btn.textContent="Criando…";}
+    try{
+      const {data,error}=await supabase.auth.signUp({email,password});
+      if(error)throw error;
+      authSession=data.session||null;
+      if(authSession){markAppUnlocked();await loadData();await syncAll("signup");render();toast("☁️ Conta criada");}
+      else if(status)status.textContent="Conta criada. Confira seu e-mail para confirmar o cadastro e depois entre.";
+    }catch(err){
+      if(status)status.textContent="❌ "+(err?.message||"Não foi possível criar a conta.");
+    }finally{if(btn){btn.disabled=false;btn.textContent="Criar conta";}}
+  });
+}
+
+function closeModal(el){el?.remove()}
+
+function dateKey(date){return date.toISOString().slice(0,10)}
+
+function dayAmount(goal,date=todayISO()){return earnings.filter(e=>e.date===date&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
+
+function esc(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+function financeMonthLabel(key=monthKey()){ const [y,m]=key.split("-"); return new Date(Number(y),Number(m)-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}); }
+
+function fmtDate(value){if(!value)return "Sem data";return new Date(value+"T12:00:00").toLocaleDateString("pt-BR")}
+
+function getCurrentWeekDays(){const start=weekStart();return Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return dateKey(d)})}
+
+function goalProgress(goal){const amount=weekEarnings(goal);return Math.min(100,goal.target?amount/goal.target*100:0)}
+
+function goalsView(){
+ return `<div class="section-title"><h2>Metas</h2><button class="btn primary" id="newGoal">+ Nova meta</button></div>
+ <div class="stack">${goals.map(g=>{const amount=weekEarnings(g);const p=goalProgress(g);return `<section class="card full"><div class="row"><h3>🎯 ${esc(g.name)}</h3><span class="tag">${g.active===false?"Inativa":"Ativa"}</span></div><div class="row"><div><div class="metric">${money(amount)}</div><div class="muted">de ${money(g.target)} na semana</div></div><div style="text-align:right"><div class="metric">${p.toFixed(1)}%</div><div class="muted">concluído</div></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Diária: ${money(g.dailyTarget)}</span><span class="muted">Hoje: ${money(dayAmount(g))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(g,d);const hit=val>=g.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div><div class="actions" style="margin-top:15px"><button class="btn primary" data-goal-earning="${g.id}">+ Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">Editar</button><button class="btn danger" data-goal-delete="${g.id}">Excluir</button></div></section>`}).join("")||`<div class="empty">Nenhuma meta cadastrada. Crie sua primeira meta semanal.</div>`}</div>`;
+}
+
+function modal(content){const wrapper=document.createElement("div");wrapper.className="modal-backdrop";wrapper.innerHTML=`<div class="modal">${content}</div>`;document.body.appendChild(wrapper);return wrapper}
+
+function money(value){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(value)||0)}
+
+function monthKey(date=todayISO()){ return String(date).slice(0,7); }
+
+async function musicLinkForm(){
+ const el=modal(`<div class="section-title"><h3>🔗 Adicionar música por link</h3><button class="btn" id="close">Fechar</button></div><form id="musicLinkForm" class="form-grid"><div class="field full"><label>Link da música</label><input name="url" type="url" placeholder="Cole um link de áudio ou do YouTube" required /><div class="muted field-help">YouTube: o vídeo será reproduzido pelo player oficial. Áudio direto: usa o player de áudio do Zyn.</div></div><div class="field"><label>Nome da música</label><input name="title" required /></div><div class="field"><label>Artista</label><input name="artist" /></div><div class="field"><label>Álbum</label><input name="album" /></div><div class="field"><label>Capa (URL opcional)</label><input name="cover" type="url" /></div><div class="field full"><label>Playlist</label><select name="playlist"><option value="">Sem playlist</option>${musicPlaylists.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div><div class="actions field full"><button class="btn primary" type="submit">Adicionar</button></div></form>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#musicLinkForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await addMusicTrack({url:String(f.get("url")||"").trim(),title:f.get("title"),artist:f.get("artist"),album:f.get("album"),cover:f.get("cover"),source:"direct"},f.get("playlist")||null);closeModal(el);render();};
+}
+
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const request=indexedDB.open(DB_NAME,DB_VERSION);
+    request.onupgradeneeded=()=>{
+      const database=request.result;
+      ["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","investmentAssets","musicTracks","musicPlaylists","musicSettings","syncQueue","syncMeta"].forEach(store=>{
+        if(!database.objectStoreNames.contains(store)) database.createObjectStore(store,{keyPath:"id",autoIncrement:true});
+      });
+    };
+    request.onsuccess=()=>{db=request.result;resolve(db)};
+    request.onerror=()=>reject(request.error);
+  });
+}
+
+function put(name,data,options={}){return new Promise((resolve,reject)=>{
+  const payload={...(data||{})};
+  if(options.touch!==false && name!=="syncQueue" && name!=="syncMeta") payload.updatedAt=new Date().toISOString();
+  const r=store(name,"readwrite").put(payload);
+  r.onsuccess=()=>{if(options.touch!==false && typeof scheduleSync==="function")scheduleSync();resolve(r.result)};r.onerror=()=>reject(r.error)
+})}
+
+function remindersView(){
+ return `<div class="section-title"><h2>Lembretes</h2><button class="btn primary" id="newReminder">+ Novo</button></div><div class="stack">${reminders.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(r=>`<div class="list-item ${r.done?"done":""}"><div><b>${esc(r.title)}</b><div class="muted">${esc(r.category||"Geral")} • ${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div>${r.notes?`<div class="muted">${esc(r.notes)}</div>`:""}</div><div class="actions"><button class="btn" data-reminder-done="${r.id}">${r.done?"↩":"✓"}</button><button class="btn" data-reminder-edit="${r.id}">✎</button><button class="btn danger" data-reminder-delete="${r.id}">×</button></div></div>`).join("")||`<div class="empty">Você ainda não cadastrou lembretes.</div>`}</div>`;
+}
+
+function remove(name,id){return new Promise(async(resolve,reject)=>{
+  const stamp=new Date().toISOString();
+  const r=store(name,"readwrite").delete(id);
+  r.onsuccess=async()=>{
+    try{ if(name!=="syncQueue" && name!=="syncMeta") await put("syncQueue",{storeName:name,recordId:String(id),updatedAt:stamp,deleted:true},{touch:false}); if(typeof scheduleSync==="function") scheduleSync(); resolve(); }
+    catch(e){reject(e)}
+  };
+  r.onerror=()=>reject(r.error)
+})}
+
+async function searchMusicArtist(query){
+ musicSearchBusy=true;render();
+ try{const url=`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&attribute=artistTerm&limit=20`;const response=await fetch(url);if(!response.ok)throw new Error("Busca indisponível");const json=await response.json();return (json.results||[]).filter(x=>x.previewUrl).map(x=>({title:x.trackName,artist:x.artistName,album:x.collectionName,cover:x.artworkUrl100?.replace("100x100bb","600x600bb")||"",url:x.previewUrl,source:"itunes-preview",duration:x.trackTimeMillis||0}));}finally{musicSearchBusy=false;}
+}
+
+function setView(view){currentView=view;render()}
+
+function store(name,mode="readonly"){return db.transaction(name,mode).objectStore(name)}
+
+function toast(message){const el=document.createElement("div");el.textContent=message;Object.assign(el.style,{position:"fixed",bottom:"82px",left:"50%",transform:"translateX(-50%)",background:"var(--text)",color:"var(--surface)",padding:"12px 17px",borderRadius:"12px",zIndex:40,boxShadow:"0 8px 30px #0003"});document.body.appendChild(el);setTimeout(()=>el.remove(),2500)}
+
+function todayISO(){return new Date().toISOString().slice(0,10)}
+
+function toggleTheme(){theme=theme==="light"?"dark":"light";localStorage.setItem("zyn-theme",theme);document.body.className=theme;render()}
+
+function uiIcon(name){const paths={home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',plan:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M7 10h10M8 14h3M14 14h2"/>',well:'<path d="M8 5v5M16 5v5M5 8h6M13 8h6M7 13c0 3 2 5 5 5s5-2 5-5"/>',finance:'<path d="M4 18V8M10 18V5M16 18v-7M21 18H3"/><path d="m17 7 3-3 2 2"/>',music:'<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="3"/><circle cx="16.5" cy="16" r="3"/>',assistant:'<path d="M7 8h10a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4H9l-4 3v-7a4 4 0 0 1-2-3v-1a4 4 0 0 1 4-4Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'};return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.home}</svg>`}
+
+function weekEarnings(goal){const days=getCurrentWeekDays();return earnings.filter(e=>days.includes(e.date)&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
+
+function weekStart(date=new Date()){const d=new Date(date);const day=d.getDay();const diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);d.setHours(0,0,0,0);return d}
+
+const DEFAULT_GYM=[
+ {day:1,label:"Segunda",type:"gym",workout:"Peito + Tríceps"},
+ {day:2,label:"Terça",type:"gym",workout:"Costas + Bíceps"},
+ {day:3,label:"Quarta",type:"rest",workout:"Recuperação"},
+ {day:4,label:"Quinta",type:"gym",workout:"Pernas"},
+ {day:5,label:"Sexta",type:"gym",workout:"Ombros + Abdômen"},
+ {day:6,label:"Sábado",type:"optional",workout:"Cardio / treino opcional"},
+ {day:0,label:"Domingo",type:"rest",workout:"Descanso"}
+];
+const GYM_EX={
+"Peito + Tríceps":[["Supino máquina","Peito e tríceps","3","10–12","60–90s"],["Supino inclinado máquina","Peito superior","3","10–12","60–90s"],["Crucifixo máquina","Peitoral","3","12","60s"],["Tríceps na polia","Tríceps","3","10–12","60–90s"]],
+"Costas + Bíceps":[["Puxada frontal","Costas","3","10–12","60–90s"],["Remada máquina","Costas","3","10–12","60–90s"],["Pulldown","Costas","3","12","60s"],["Rosca bíceps máquina/polia","Bíceps","3","10–12","60s"]],
+"Pernas":[["Leg press","Quadríceps e glúteos","3","10–12","90s"],["Cadeira extensora","Quadríceps","3","12","60–90s"],["Mesa flexora","Posterior de coxa","3","12","60–90s"],["Panturrilha máquina","Panturrilhas","3","12–15","60s"]],
+"Ombros + Abdômen":[["Desenvolvimento máquina","Ombros","3","10–12","60–90s"],["Elevação lateral máquina/polia","Ombros","3","12","60s"],["Face pull/polia","Ombros posteriores","3","12–15","60s"],["Abdominal máquina","Abdômen","3","12–15","60s"]],
+"Cardio / treino opcional":[["Caminhada","Cardio leve","1","20–40 min","—"],["Bicicleta ergométrica","Cardio","1","20–30 min","—"]]
+};
+
 function gymWeek(){return DEFAULT_GYM.map(d=>gymPlans.find(x=>x.day===d.day)||d)}
 function gymToday(){const d=new Date().getDay();return gymWeek().find(x=>x.day===d)||DEFAULT_GYM[6]}
 function gymCount(){const ds=getCurrentWeekDays();return gymSessions.filter(x=>ds.includes(x.date)).length}
