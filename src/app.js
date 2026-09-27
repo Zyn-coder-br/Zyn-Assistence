@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.9.2";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.9.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.9.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -793,7 +793,24 @@ function bind(){
  document.querySelector("#themeBtn").onclick=toggleTheme;
  document.querySelector("#cloudStatus")?.addEventListener("click",authForm);
  const cloud=document.querySelector("#cloudStatus"); if(cloud){cloud.className=`cloud-status ${cloudStatus}`;cloud.title=cloudMessage;cloud.innerHTML=`<span></span>${esc(cloudStatus==="synced"?cloudMessage:(currentUser()?"Conta conectada — toque para sincronizar":"Entrar para sincronizar"))}`;}
- document.querySelector("#updateBtn").onclick=()=>toast("Assistente Zyn v"+APP_VERSION);
+ document.querySelector("#updateBtn").onclick=async()=>{
+   const btn=document.querySelector("#updateBtn");
+   if(btn){btn.disabled=true;btn.textContent="…";}
+   try{
+     if("serviceWorker" in navigator){
+       const reg=await navigator.serviceWorker.getRegistration("./");
+       if(reg){
+         try{await reg.update();}catch(e){}
+         if(reg.waiting){reg.waiting.postMessage({type:"SKIP_WAITING"});}
+       }
+       if(window.caches){
+         const keys=await caches.keys();
+         await Promise.all(keys.map(k=>caches.delete(k)));
+       }
+     }
+   }catch(e){console.warn("[Zyn] atualização forçada:",e);}
+   location.reload();
+ };
  document.querySelectorAll("[data-view]").forEach(btn=>btn.onclick=()=>setView(btn.dataset.view));
  document.querySelector("#moreFab")?.addEventListener("click",e=>{e.stopPropagation();moreMenu();});
  document.querySelector("#moreClose")?.addEventListener("click",e=>{e.stopPropagation();closeMoreMenu();});
@@ -925,7 +942,12 @@ window.addEventListener("appinstalled", ()=>{
    bindCloudEvents();
    if(appUnlocked && authSession){setCloudStatus("syncing","Conectado — sincronizando…");syncAll("startup");}
    else if(appUnlocked) setCloudStatus("offline",navigator.onLine?"Entre na conta para sincronizar":"Sem internet — dados locais disponíveis");
-   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+   if("serviceWorker" in navigator){
+     try{
+       const reg=await navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"});
+       try{await reg.update();}catch(e){}
+     }catch(e){console.warn("[Zyn] Service Worker:",e);}
+   }
    render();
    if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
  }catch(error){
