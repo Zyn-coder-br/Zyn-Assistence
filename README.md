@@ -107,3 +107,13 @@ Restauradas as funções centrais de IndexedDB, utilitários e funções de apoi
 - Mais: removido da barra inferior e transformado em botão flutuante no canto inferior direito; o painel fecha ao clicar novamente ou fora dele.
 - Cabeçalho global passa a mostrar apenas “Zyn”.
 - Barra inferior passa a ter quatro itens: Início, Planejar, Bem-estar e Finanças.
+
+
+## V1.8.4 — correções funcionais
+- Finanças: interfaces funcionais para Cartões, Gastos e Metas; gastos permitem editar/excluir lançamentos.
+- GYM: botão "Editar treino" no treino do dia e edição dos dias/exercícios da semana com adicionar/remover exercício.
+- Música: biblioteca focada em arquivos completos do aparelho; suporte a seleção múltipla e importação de pasta. Prévias antigas do iTunes não são exibidas como biblioteca.
+- Mais: permanece como botão flutuante fora da barra inferior e fecha ao tocar fora.
+- Planejar: metas podem ser criadas e editadas.
+- Cabeçalho: identidade reduzida para "Zyn".
+- Service Worker atualizado para v1.8.4.
