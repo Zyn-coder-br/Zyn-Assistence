@@ -4,14 +4,14 @@ const APP_VERSION = "1.8.4";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.8.4", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.8.5", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
 let cloudStatus = "offline";
 let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 let db;
 let currentView = "home";
 let financeTab = "overview";
@@ -125,13 +125,18 @@ function setupMediaSession(){
 async function playMusicTrack(track,queueIds=null,index=null){
   if(isYouTubeTrack(track)) return playYouTubeTrack(track,queueIds,index);
   ensureMusicAudio();
-  if(!track?.url){toast("⚠️ Esta música não tem uma URL de áudio válida");return;}
+  let localBlobUrl=track?.blobUrl||"";
+  if(!localBlobUrl && track?.fileBlob){
+    try{ localBlobUrl=URL.createObjectURL(track.fileBlob); track.blobUrl=localBlobUrl; }catch(error){ localBlobUrl=""; }
+  }
+  const audioSource=localBlobUrl||track?.url||"";
+  if(!audioSource){toast(track?.source==="local"?"⚠️ O arquivo desta música não está disponível neste dispositivo":"⚠️ Esta música não tem uma URL de áudio válida");return;}
   musicPreviewTrack=null;
   if(youtubePlayer){try{youtubePlayer.pauseVideo();youtubePlayer.destroy();}catch(e){} youtubePlayer=null;}
   if(queueIds){musicQueue=[...queueIds];musicQueueIndex=Math.max(0,index??musicQueue.findIndex(id=>String(id)===String(track.id)));}
   else if(!musicQueue.length){musicQueue=[track.id];musicQueueIndex=0;}
   musicCurrentTrackId=track.id;
-  musicAudio.src=track.blobUrl||track.url||"";
+  musicAudio.src=audioSource;
   musicAudio.load();
   updateMediaSession();
   try{await musicAudio.play();}catch(error){toast("▶️ Toque em play novamente para iniciar a música");}
