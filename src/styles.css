@@ -236,3 +236,12 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .finance-tx-row{cursor:pointer;transition:background .16s ease,border-color .16s ease}.finance-tx-row:hover,.finance-tx-row:focus-visible{background:var(--surface2);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));outline:none}.finance-tx-row:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 35%,transparent)}
 .more-fab{bottom:calc(86px + 76px);width:56px;height:56px;border-radius:18px;z-index:25}.more-fab .ui-icon{width:25px;height:25px}.more-popover{bottom:calc(86px + 76px + 68px);z-index:26}
 @media(max-width:700px){.more-fab{right:14px;bottom:calc(76px + 68px + 12px);width:54px;height:54px;border-radius:18px}.more-popover{right:12px;bottom:calc(76px + 68px + 12px + 66px);width:calc(100% - 24px)}}
+
+
+/* V1.9.1 — mini-player contextual e janelas sempre acima do player */
+.music-dock{z-index:10;pointer-events:none}
+.music-dock.active{pointer-events:auto}
+.modal-backdrop{z-index:1000}
+.modal{position:relative;z-index:1001}
+.more-fab{z-index:1100}
+.more-popover{z-index:1099}

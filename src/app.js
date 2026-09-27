@@ -493,9 +493,13 @@ function syncMusicDock(){
  const dock=document.querySelector("#musicDock");
  if(!dock)return;
  const track=currentMusicTrack();
- const active=!!track;
+ const isPlaying=!!track && !!musicAudio && !musicAudio.paused && !musicAudio.ended;
+ // O mini-player só aparece enquanto uma música estiver efetivamente tocando
+ // e nunca sobre a tela completa de Música.
+ const active=isPlaying && currentView!=="music";
  dock.classList.toggle("active",active);
- dock.classList.toggle("expanded",currentView==="music");
+ dock.classList.toggle("expanded",false);
+ dock.setAttribute("aria-hidden",String(!active));
  const title=dock.querySelector("#dockTitle");
  const artist=dock.querySelector("#dockArtist");
  const play=dock.querySelector("#dockPlay");
