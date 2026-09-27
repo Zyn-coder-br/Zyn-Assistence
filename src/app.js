@@ -1,17 +1,17 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.8.4";
+const APP_VERSION = "1.8.6";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.8.5", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.8.6", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
 let cloudStatus = "offline";
 let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 let db;
 let currentView = "home";
 let financeTab = "overview";
@@ -28,64 +28,16 @@ let deferredInstallPrompt = null;
 let musicTracks = [], musicPlaylists = [], musicSettings = null;
 let musicAudio = null, musicCurrentTrackId = null, musicQueue = [], musicQueueIndex = -1, musicSearchBusy = false;
 let musicPreviewTrack = null;
-let youtubePlayer = null, youtubeApiPromise = null;
+let musicSelectedIds = new Set();
+let youtubePlayer = null;
 const app = document.querySelector("#app");
 let appUnlocked = true;
 function markAppUnlocked(){appUnlocked=true;localStorage.setItem("zyn-app-unlocked","true");}
 function lockApp(){appUnlocked=true;localStorage.setItem("zyn-app-unlocked","true");}
 
-function getYouTubeId(input){
-  const value=String(input||"").trim();
-  if(!value)return "";
-  try{
-    const u=new URL(value);
-    if(u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("/")[0].slice(0,11);
-    if(u.hostname.includes("youtube.com")){
-      if(u.pathname==="/watch") return (u.searchParams.get("v")||"").slice(0,11);
-      const parts=u.pathname.split("/").filter(Boolean);
-      const idx=parts.findIndex(x=>x==="embed"||x==="shorts"||x==="live");
-      if(idx>=0) return String(parts[idx+1]||"").slice(0,11);
-    }
-  }catch(e){}
-  return "";
-}
-function isYouTubeTrack(track){return !!track && track.source==="youtube" && !!track.youtubeId;}
-function loadYouTubeAPI(){
-  if(window.YT?.Player) return Promise.resolve(window.YT);
-  if(youtubeApiPromise) return youtubeApiPromise;
-  youtubeApiPromise=new Promise((resolve,reject)=>{
-    const old=window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady=()=>{try{old?.();}catch(e){} resolve(window.YT);};
-    const script=document.createElement("script");
-    script.src="https://www.youtube.com/iframe_api";
-    script.async=true;
-    script.onerror=()=>{youtubeApiPromise=null;reject(new Error("YouTube API indisponível"));};
-    document.head.appendChild(script);
-  });
-  return youtubeApiPromise;
-}
-async function playYouTubeTrack(track,queueIds=null,index=null){
-  if(!isYouTubeTrack(track)){toast("Link do YouTube inválido");return;}
-  ensureMusicAudio().pause();
-  musicPreviewTrack=null;
-  if(queueIds){musicQueue=[...queueIds];musicQueueIndex=Math.max(0,index??musicQueue.findIndex(id=>String(id)===String(track.id)));}
-  else if(!musicQueue.length){musicQueue=[track.id];musicQueueIndex=0;}
-  musicCurrentTrackId=track.id;
-  musicSettings={...(musicSettings||{id:1}),currentTrackId:track.id,queue:musicQueue,queueIndex:musicQueueIndex};
-  await put("musicSettings",musicSettings);
-  render();
-  try{
-    const YT=await loadYouTubeAPI();
-    const host=document.querySelector("#youtubePlayer");
-    if(!host)return;
-    if(youtubePlayer){try{youtubePlayer.destroy();}catch(e){} youtubePlayer=null;}
-    youtubePlayer=new YT.Player("youtubePlayer",{videoId:track.youtubeId,playerVars:{playsinline:1,autoplay:1,origin:location.origin,rel:0},events:{
-      onReady:e=>{try{e.target.playVideo();}catch(err){} updateMediaSession();},
-      onStateChange:e=>{if(e.data===0)playNextMusic(1); if(e.data===1)updateMediaSession(); if(e.data===2)updateMediaSession();},
-      onError:()=>toast("⚠️ Este vídeo não pode ser reproduzido incorporado pelo YouTube.")
-    }});
-  }catch(e){toast("⚠️ Não foi possível carregar o player do YouTube");}
-}
+function getYouTubeId(input){ return ""; }
+function isYouTubeTrack(track){ return false; }
+function cleanupYouTubePlayer(){ youtubePlayer=null; }
 function ensureMusicAudio(){
   if(musicAudio) return musicAudio;
   musicAudio = document.createElement("audio");
@@ -115,31 +67,41 @@ function updateMediaSession(){
   const track=musicPreviewTrack||currentMusicTrack();
   if(!track){navigator.mediaSession.metadata=null;return;}
   try{navigator.mediaSession.metadata=new MediaMetadata({title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"Zyn Music",artwork:track.cover?[{src:track.cover,sizes:"512x512",type:"image/jpeg"}]:[]});}catch(e){}
-  try{navigator.mediaSession.playbackState=(isYouTubeTrack(track) ? "playing" : (musicAudio?.paused?"paused":"playing"));}catch(e){}
+  try{navigator.mediaSession.playbackState=musicAudio?.paused?"paused":"playing";}catch(e){}
 }
 function setupMediaSession(){
   if(!("mediaSession" in navigator)) return;
-  const actions={play:()=>isYouTubeTrack(currentMusicTrack())?(youtubePlayer?.playVideo?.()):musicAudio?.play(),pause:()=>isYouTubeTrack(currentMusicTrack())?(youtubePlayer?.pauseVideo?.()):musicAudio?.pause(),previoustrack:()=>playNextMusic(-1),nexttrack:()=>playNextMusic(1),seekbackward:()=>{if(isYouTubeTrack(currentMusicTrack())){const t=youtubePlayer?.getCurrentTime?.()||0;youtubePlayer?.seekTo?.(Math.max(0,t-10),true);}else if(musicAudio)musicAudio.currentTime=Math.max(0,musicAudio.currentTime-10)},seekforward:()=>{if(isYouTubeTrack(currentMusicTrack())){const t=youtubePlayer?.getCurrentTime?.()||0;youtubePlayer?.seekTo?.(t+10,true);}else if(musicAudio)musicAudio.currentTime=Math.min(musicAudio.duration||0,musicAudio.currentTime+10)},seekto:(d)=>{if(!Number.isFinite(d.seekTime))return;if(isYouTubeTrack(currentMusicTrack()))youtubePlayer?.seekTo?.(d.seekTime,true);else if(musicAudio)musicAudio.currentTime=d.seekTime}};
+  const actions={play:()=>musicAudio?.play(),pause:()=>musicAudio?.pause(),previoustrack:()=>playNextMusic(-1),nexttrack:()=>playNextMusic(1),seekbackward:()=>{if(musicAudio)musicAudio.currentTime=Math.max(0,musicAudio.currentTime-10)},seekforward:()=>{if(musicAudio)musicAudio.currentTime=Math.min(musicAudio.duration||0,musicAudio.currentTime+10)},seekto:(d)=>{if(Number.isFinite(d.seekTime)&&musicAudio)musicAudio.currentTime=d.seekTime}};
   for(const [name,fn] of Object.entries(actions)){try{navigator.mediaSession.setActionHandler(name,fn)}catch(e){}}
 }
 async function playMusicTrack(track,queueIds=null,index=null){
-  if(isYouTubeTrack(track)) return playYouTubeTrack(track,queueIds,index);
+  if(!track){toast("Adicione uma música primeiro");return;}
   ensureMusicAudio();
-  let localBlobUrl=track?.blobUrl||"";
-  if(!localBlobUrl && track?.fileBlob){
-    try{ localBlobUrl=URL.createObjectURL(track.fileBlob); track.blobUrl=localBlobUrl; }catch(error){ localBlobUrl=""; }
-  }
-  const audioSource=localBlobUrl||track?.url||"";
-  if(!audioSource){toast(track?.source==="local"?"⚠️ O arquivo desta música não está disponível neste dispositivo":"⚠️ Esta música não tem uma URL de áudio válida");return;}
+  let audioSource="";
+  try{
+    if(track.fileData){
+      const bytes = track.fileData instanceof ArrayBuffer ? track.fileData : (track.fileData?.buffer || track.fileData);
+      const blob = new Blob([bytes], {type:track.mimeType||"audio/mpeg"});
+      audioSource = URL.createObjectURL(blob);
+      track.blobUrl = audioSource;
+    }else if(track.fileBlob){
+      const blob = track.fileBlob instanceof Blob ? track.fileBlob : new Blob([track.fileBlob], {type:track.mimeType||"audio/mpeg"});
+      audioSource = URL.createObjectURL(blob);
+      track.blobUrl = audioSource;
+    }else if(track.source!=="youtube" && track.url){
+      audioSource = track.url;
+    }
+  }catch(error){ console.warn("[Zyn Music] Falha ao preparar áudio",error); audioSource=""; }
+  if(!audioSource){toast("⚠️ O arquivo desta música não está disponível no aparelho");return;}
+  cleanupYouTubePlayer();
   musicPreviewTrack=null;
-  if(youtubePlayer){try{youtubePlayer.pauseVideo();youtubePlayer.destroy();}catch(e){} youtubePlayer=null;}
   if(queueIds){musicQueue=[...queueIds];musicQueueIndex=Math.max(0,index??musicQueue.findIndex(id=>String(id)===String(track.id)));}
   else if(!musicQueue.length){musicQueue=[track.id];musicQueueIndex=0;}
   musicCurrentTrackId=track.id;
   musicAudio.src=audioSource;
   musicAudio.load();
   updateMediaSession();
-  try{await musicAudio.play();}catch(error){toast("▶️ Toque em play novamente para iniciar a música");}
+  try{await musicAudio.play();}catch(error){toast("▶️ Toque no play para iniciar a música");}
   musicSettings={...(musicSettings||{id:1}),currentTrackId:track.id,queue:musicQueue,queueIndex:musicQueueIndex};
   await put("musicSettings",musicSettings);
   render();
@@ -157,13 +119,24 @@ async function playNextMusic(direction=1){
   musicQueue=ids;musicQueueIndex=idx;
   await playMusicTrack(track,ids,idx);
 }
-async function toggleMusicPlay(){const track=currentMusicTrack()||musicTracks[0];if(isYouTubeTrack(track)){if(!youtubePlayer)return playMusicTrack(track);const state=youtubePlayer.getPlayerState?.();if(state===1)youtubePlayer.pauseVideo();else youtubePlayer.playVideo();updateMediaSession();return;}ensureMusicAudio();if(!musicAudio.src){if(track)return playMusicTrack(track);toast("Adicione uma música primeiro");return;}if(musicAudio.paused){try{await musicAudio.play()}catch(e){toast("Toque no play novamente para iniciar");}}else musicAudio.pause();updateMusicUI();updateMediaSession();}
+async function toggleMusicPlay(){
+  const track=currentMusicTrack()||musicTracks[0];
+  ensureMusicAudio();
+  if(!musicAudio.src){if(track)return playMusicTrack(track);toast("Adicione uma música primeiro");return;}
+  if(musicAudio.paused){try{await musicAudio.play()}catch(e){toast("Toque no play novamente para iniciar");}}else musicAudio.pause();
+  updateMusicUI();updateMediaSession();
+}
 async function addMusicTrack(track,playlistId=null){
-  const youtubeId=track.youtubeId||getYouTubeId(track.url);
-  const source=track.fileBlob?"local":(youtubeId?"youtube":(track.source||"direct"));
-  const payload={title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"",cover:track.cover||"",url:track.url||track.previewUrl||"",youtubeId:youtubeId||"",source,duration:track.duration||0,createdAt:new Date().toISOString()};
-  if(track.fileBlob){payload.fileBlob=track.fileBlob;payload.localOnly=true;payload.mimeType=track.fileBlob.type||"audio/*";payload.fileName=track.fileName||track.title||"música";}
-  if(!payload.url && !payload.youtubeId && !payload.fileBlob){toast("Informe um link válido ou selecione um arquivo de áudio");return;}
+  const rawUrl=String(track.url||"").trim();
+  if(/(^|\.)youtube\.com($|\.)|youtu\.be/i.test(rawUrl)){toast("Links do YouTube não são aceitos. Importe o arquivo de áudio completo.");return;}
+  const source=track.fileData?"local":(track.fileBlob?"local":(track.source||"direct"));
+  const payload={title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"",cover:track.cover||"",url:source==="local"?"":rawUrl,youtubeId:"",source,duration:track.duration||0,createdAt:new Date().toISOString()};
+  if(track.fileData){payload.fileData=track.fileData;payload.localOnly=true;payload.mimeType=track.mimeType||"audio/mpeg";payload.fileName=track.fileName||track.title||"música";}
+  else if(track.fileBlob){
+    try{payload.fileData=await track.fileBlob.arrayBuffer();payload.localOnly=true;payload.mimeType=track.fileBlob.type||"audio/mpeg";payload.fileName=track.fileName||track.title||"música";}
+    catch(e){toast("Não foi possível guardar este arquivo de áudio");return;}
+  }
+  if(!payload.url && !payload.fileData){toast("Selecione um arquivo de áudio completo ou informe um link direto de áudio");return;}
   await put("musicTracks",payload);
   await loadData();
   const added=musicTracks.slice().sort((a,b)=>Number(b.id)-Number(a.id))[0];
@@ -171,13 +144,15 @@ async function addMusicTrack(track,playlistId=null){
   toast("🎵 Música adicionada");
 }
 async function createMusicPlaylist(name){const clean=String(name||"").trim();if(!clean)return;await put("musicPlaylists",{name:clean,trackIds:[],createdAt:new Date().toISOString()});await loadData();render();toast("🎼 Playlist criada");}
-function updateMusicUI(){const track=musicPreviewTrack||currentMusicTrack(), title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn");if(title)title.textContent=track?.title||"Nenhuma música selecionada";if(artist)artist.textContent=track?.artist||"Escolha uma música ou adicione um link";if(cover){if(cover.tagName==="IMG"){cover.src=track?.cover||"";cover.style.display=track?.cover?"block":"none";}}if(play){const yt=isYouTubeTrack(track);play.textContent=yt?(youtubePlayer?.getPlayerState?.()===1?"⏸️":"▶️"):(musicAudio&&!musicAudio.paused?"⏸️":"▶️");}const status=document.querySelector("#musicStatus");if(status)status.textContent=musicPreviewTrack?"Prévia":(track?.source==="local"?"Biblioteca local":(isYouTubeTrack(track)?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado")));}
+function updateMusicUI(){const track=currentMusicTrack(), title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn");if(title)title.textContent=track?.title||"Nenhuma música selecionada";if(artist)artist.textContent=track?.artist||"Escolha uma música da sua biblioteca";if(cover){if(cover.tagName==="IMG"){cover.src=track?.cover||"";cover.style.display=track?.cover?"block":"none";}}if(play)play.textContent=musicAudio&&!musicAudio.paused?"⏸️":"▶️";const status=document.querySelector("#musicStatus");if(status)status.textContent=track?.source==="local"?"Biblioteca local":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado");}
 function musicView(){
  const playlists=musicPlaylists, track=currentMusicTrack();
  const cover=track?.cover?`<img id="musicNowCover" src="${esc(track.cover)}" alt="Capa"/>`:`<div class="music-cover-placeholder" id="musicNowCover">♪</div>`;
- const youtube=isYouTubeTrack(track);
- return `<div class="module-page"><div class="module-head"><div class="module-icon">♪</div><div class="module-head-copy"><h1>Música</h1><p>Organize sua biblioteca e playlists</p></div><button class="icon-btn">♡</button></div><div class="module-tabs"><button class="active">Biblioteca</button><button>Playlists</button><button>Favoritos</button><button>Recentes</button></div><section class="panel-card now-playing"><div class="now-playing-main">${cover}<div class="music-meta"><span class="eyebrow">TOCANDO AGORA</span><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música")}</h2><p id="musicNowArtist">${esc(track?.artist||"Adicione uma música da sua biblioteca")}</p><span class="soft-tag" id="musicStatus">${track?.source==="local"?"Biblioteca local":(youtube?"YouTube":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado"))}</span></div></div>${youtube?``:`<input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1"/>`}<div class="music-controls"><button class="music-control" id="musicPrev">⏮</button><button class="music-control music-play" id="musicPlayBtn">▶</button><button class="music-control" id="musicNext">⏭</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><button class="btn primary" id="musicAddFile">＋ Adicionar músicas</button><button class="btn" id="musicAddFolder">📁 Importar pasta</button><input id="musicFileInput" type="file" accept="audio/*" multiple hidden><input id="musicFolderInput" type="file" accept="audio/*" webkitdirectory directory multiple hidden></div></section><section class="panel-card"><div class="panel-heading"><div><h3>🎵 Minha biblioteca</h3><span>${musicTracks.length} faixa(s) completas neste aparelho</span></div><button class="btn primary" id="musicAddFileTop">＋ Música</button></div><div class="modern-list">${musicTracks.slice().reverse().map(t=>`<div class="modern-list-row"><div class="row-icon">♪</div><div class="row-main"><b>${esc(t.title)}</b><span>${esc(t.artist)}${t.source==="local"?" • Biblioteca completa":t.source==="youtube"?" • YouTube":" • Áudio completo"}</span></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button><button class="btn danger" data-music-delete="${t.id}">×</button></div></div>`).join("")||'<div class="empty">Sua biblioteca está vazia. Adicione seus arquivos de música completos.</div>'}</div></section><section class="panel-card"><div class="panel-heading"><div><h3>🎼 Minhas playlists</h3><span>${playlists.length} playlists</span></div><button class="btn primary" id="musicPlaylistNew">+ Nova playlist</button></div><div class="modern-list">${playlists.map(p=>`<button class="modern-list-row music-playlist" data-music-playlist="${p.id}"><div class="row-icon">♪</div><div class="row-main"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></div><span class="row-arrow">›</span></button>`).join("")||'<div class="empty">Crie sua primeira playlist.</div>'}</div></section><section class="panel-card music-link-card"><div class="panel-heading"><div><h3>🔗 Música completa por link</h3><span>Link direto de áudio autorizado ou YouTube</span></div><button class="btn" id="musicAddLink">+ Link</button></div><p class="muted">A busca pública não entrega músicas completas. Para sua biblioteca completa, envie o arquivo do aparelho ou adicione uma fonte completa autorizada.</p></section></div>`;
+ const selectedCount=musicSelectedIds.size;
+ return `<div class="module-page"><div class="module-head"><div class="module-icon">♪</div><div class="module-head-copy"><h1>Música</h1><p>Sua biblioteca pessoal de músicas completas</p></div><button class="icon-btn">♡</button></div><div class="module-tabs"><button class="active">Biblioteca</button><button>Playlists</button><button>Favoritos</button><button>Recentes</button></div><section class="panel-card now-playing"><div class="now-playing-main">${cover}<div class="music-meta"><span class="eyebrow">TOCANDO AGORA</span><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música")}</h2><p id="musicNowArtist">${esc(track?.artist||"Adicione uma música da sua biblioteca")}</p><span class="soft-tag" id="musicStatus">${track?.source==="local"?"Biblioteca local":(musicAudio&&!musicAudio.paused?"Reproduzindo":"Pausado")}</span></div></div><input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1"/><div class="music-controls"><button class="music-control" id="musicPrev">⏮</button><button class="music-control music-play" id="musicPlayBtn">▶</button><button class="music-control" id="musicNext">⏭</button></div><div class="music-extra"><button class="btn" id="musicShuffle">🔀 Aleatório</button><button class="btn primary" id="musicAddFile">＋ Adicionar músicas</button><button class="btn" id="musicAddFolder">📁 Importar pasta</button><input id="musicFileInput" type="file" accept="audio/*" multiple hidden><input id="musicFolderInput" type="file" accept="audio/*" webkitdirectory directory multiple hidden></div></section><section class="panel-card"><div class="panel-heading"><div><h3>🎵 Minha biblioteca</h3><span>${musicTracks.length} faixa(s) completas no aparelho</span></div><div class="actions"><button class="btn" id="musicSelectAll">${selectedCount===musicTracks.length&&musicTracks.length?"☑ Desmarcar tudo":"☐ Selecionar tudo"}</button><button class="btn danger" id="musicDeleteSelected" ${selectedCount?"":"disabled"}>🗑 Excluir selecionadas${selectedCount?` (${selectedCount})`:""}</button><button class="btn primary" id="musicAddFileTop">＋ Música</button></div></div><div class="modern-list">${musicTracks.slice().reverse().map(t=>`<div class="modern-list-row"><label class="music-check"><input type="checkbox" data-music-select="${t.id}" ${musicSelectedIds.has(String(t.id))?"checked":""}></label><div class="row-icon">♪</div><div class="row-main"><b>${esc(t.title)}</b><span>${esc(t.artist)}${t.source==="local"?" • Biblioteca completa":" • Áudio completo"}</span></div><div class="actions"><button class="btn" data-music-play="${t.id}">▶</button></div></div>`).join("")||'<div class="empty">Sua biblioteca está vazia. Adicione seus arquivos de música completos.</div>'}</div></section><section class="panel-card"><div class="panel-heading"><div><h3>🎼 Minhas playlists</h3><span>${playlists.length} playlists</span></div><button class="btn primary" id="musicPlaylistNew">+ Nova playlist</button></div><div class="modern-list">${playlists.map(p=>`<button class="modern-list-row music-playlist" data-music-playlist="${p.id}"><div class="row-icon">♪</div><div class="row-main"><b>${esc(p.name)}</b><span>${(p.trackIds||[]).length} música(s)</span></div><span class="row-arrow">›</span></button>`).join("")||'<div class="empty">Crie sua primeira playlist.</div>'}</div></section></div>`;
 }
+async function addLocalMusicFiles(files){const list=[...files].filter(f=>f&&(f.type||"").startsWith("audio/"));if(!list.length)return toast("Escolha um arquivo de áudio");for(const file of list){await addMusicTrack({fileBlob:file,fileName:file.name,title:file.name.replace(/\.[^/.]+$/,"" )||"Música",artist:"Minha biblioteca",album:"Biblioteca do Zyn",mimeType:file.type},null);}await loadData();render();toast(`🎵 ${list.length} música(s) adicionada(s) à biblioteca`);}
+
 async function addLocalMusicFiles(files){const list=[...files].filter(f=>f&&(f.type||"").startsWith("audio/"));if(!list.length)return toast("Escolha um arquivo de áudio");for(const file of list){await addMusicTrack({fileBlob:file,fileName:file.name,title:file.name.replace(/\.[^/.]+$/,"")||"Música",artist:"Minha biblioteca",album:"Biblioteca do Zyn"},null);}await loadData();render();toast(`🎵 ${list.length} música(s) adicionada(s) à biblioteca`);}
 
 
@@ -279,11 +254,6 @@ function money(value){return new Intl.NumberFormat("pt-BR",{style:"currency",cur
 
 function monthKey(date=todayISO()){ return String(date).slice(0,7); }
 
-async function musicLinkForm(){
- const el=modal(`<div class="section-title"><h3>🔗 Adicionar música por link</h3><button class="btn" id="close">Fechar</button></div><form id="musicLinkForm" class="form-grid"><div class="field full"><label>Link da música</label><input name="url" type="url" placeholder="Cole um link de áudio ou do YouTube" required /><div class="muted field-help">YouTube: o vídeo será reproduzido pelo player oficial. Áudio direto: usa o player de áudio do Zyn.</div></div><div class="field"><label>Nome da música</label><input name="title" required /></div><div class="field"><label>Artista</label><input name="artist" /></div><div class="field"><label>Álbum</label><input name="album" /></div><div class="field"><label>Capa (URL opcional)</label><input name="cover" type="url" /></div><div class="field full"><label>Playlist</label><select name="playlist"><option value="">Sem playlist</option>${musicPlaylists.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div><div class="actions field full"><button class="btn primary" type="submit">Adicionar</button></div></form>`);
- el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#musicLinkForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await addMusicTrack({url:String(f.get("url")||"").trim(),title:f.get("title"),artist:f.get("artist"),album:f.get("album"),cover:f.get("cover"),source:"direct"},f.get("playlist")||null);closeModal(el);render();};
-}
-
 function openDB(){
   return new Promise((resolve,reject)=>{
     const request=indexedDB.open(DB_NAME,DB_VERSION);
@@ -318,11 +288,6 @@ function remove(name,id){return new Promise(async(resolve,reject)=>{
   };
   r.onerror=()=>reject(r.error)
 })}
-
-async function searchMusicArtist(query){
- musicSearchBusy=true;render();
- try{const url=`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&attribute=artistTerm&limit=20`;const response=await fetch(url);if(!response.ok)throw new Error("Busca indisponível");const json=await response.json();return (json.results||[]).filter(x=>x.previewUrl).map(x=>({title:x.trackName,artist:x.artistName,album:x.collectionName,cover:x.artworkUrl100?.replace("100x100bb","600x600bb")||"",url:x.previewUrl,source:"itunes-preview",duration:x.trackTimeMillis||0}));}finally{musicSearchBusy=false;}
-}
 
 function setView(view){currentView=view;render()}
 
@@ -474,16 +439,14 @@ function syncMusicDock(){
  if(title)title.textContent=track?.title||"Nenhuma música";
  if(artist)artist.textContent=track?.artist||"Zyn Music";
  if(cover){cover.textContent=track?.cover?"":"🎧";cover.style.backgroundImage=track?.cover?`url("${String(track.cover).replace(/"/g,"%22")}")`:"";}
- if(play){const playing=isYouTubeTrack(track)?youtubePlayer?.getPlayerState?.()===1:!!musicAudio&&!musicAudio.paused;play.textContent=playing?"⏸️":"▶️";}
- const host=document.querySelector("#youtubePlayer");
- if(host)host.classList.toggle("visible",isYouTubeTrack(track));
+ if(play){const playing=!!musicAudio&&!musicAudio.paused;play.textContent=playing?"⏸️":"▶️";}
  updateMusicUI();
 }
 function moreMenu(){const el=document.querySelector("#morePopover");if(!el)return;moreMenuOpen=!moreMenuOpen;el.classList.toggle("open",moreMenuOpen);el.setAttribute("aria-hidden",String(!moreMenuOpen));}
 function closeMoreMenu(){const el=document.querySelector("#morePopover");if(el){el.classList.remove("open");el.setAttribute("aria-hidden","true")}moreMenuOpen=false;}
 
 
-function layout(){return `<div class="shell"><header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="title">Zyn</div></div></div><div class="actions"><button class="cloud-status offline" id="cloudStatus" title="Status da nuvem"><span></span>Entrar para sincronizar</button><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header><main id="content"></main></div><div id="musicDock" class="music-dock"><div id="youtubePlayer" class="youtube-persistent-host"></div><div class="music-dock-main"><div id="dockCover" class="music-dock-cover">♪</div><div class="music-dock-meta"><b id="dockTitle">Nenhuma música</b><span id="dockArtist">Zyn Music</span></div><button class="music-dock-btn" id="dockPrev">⏮</button><button class="music-dock-btn dock-play" id="dockPlay">▶</button><button class="music-dock-btn" id="dockNext">⏭</button><button class="music-dock-open" id="dockOpen">♪</button></div></div><div id="morePopover" class="more-popover" aria-hidden="true"><div class="more-popover-head"><div><b>Mais</b><span>Outras áreas do Zyn</span></div><button class="icon-btn" id="moreClose" aria-label="Fechar">×</button></div><div class="more-grid"><button class="more-item" data-more-view="planning">${uiIcon("plan")}<b>Planejamento</b><span>Lembretes + Metas</span></button><button class="more-item" data-more-view="wellness">${uiIcon("well")}<b>Bem-estar</b><span>GYM + Dietas</span></button><button class="more-item" data-more-view="finance">${uiIcon("finance")}<b>Finanças</b><span>Controle financeiro</span></button><button class="more-item" data-more-view="investments">${uiIcon("finance")}<b>Investimentos</b><span>Carteira e patrimônio</span></button><button class="more-item" data-more-view="music">${uiIcon("music")}<b>Música</b><span>Biblioteca e playlists</span></button><button class="more-item" data-more-view="assistant">${uiIcon("assistant")}<b>Zyn Assistente</b><span>Seu assistente pessoal</span></button></div></div><button id="moreFab" class="more-fab" aria-label="Abrir Mais">${uiIcon("more")}<span>Mais</span></button><nav class="nav"><div class="nav-inner"><button data-view="home" class="${currentView==="home"?"active":""}">${uiIcon("home")}<span>Início</span></button><button data-view="planning" class="${["planning","reminders","goals"].includes(currentView)?"active":""}">${uiIcon("plan")}<span>Planejar</span></button><button data-view="wellness" class="${["wellness","gym","gymWorkout","food","habits"].includes(currentView)?"active":""}">${uiIcon("well")}<span>Bem-estar</span></button><button data-view="finance" class="${["finance","investments"].includes(currentView)?"active":""}">${uiIcon("finance")}<span>Finanças</span></button></div></nav>`;}
+function layout(){return `<div class="shell"><header class="topbar"><div class="brand"><div class="brand-mark">Z</div><div><div class="title">Zyn</div></div></div><div class="actions"><button class="cloud-status offline" id="cloudStatus" title="Status da nuvem"><span></span>Entrar para sincronizar</button><button class="icon-btn install-btn" id="installBtn" title="Instalar Zyn" hidden>⬇</button><button class="icon-btn" id="themeBtn" title="Alternar tema">◐</button><button class="icon-btn" id="updateBtn" title="Ver versão">↻</button></div></header><main id="content"></main></div><div id="musicDock" class="music-dock"><div class="music-dock-main"><div id="dockCover" class="music-dock-cover">♪</div><div class="music-dock-meta"><b id="dockTitle">Nenhuma música</b><span id="dockArtist">Zyn Music</span></div><button class="music-dock-btn" id="dockPrev">⏮</button><button class="music-dock-btn dock-play" id="dockPlay">▶</button><button class="music-dock-btn" id="dockNext">⏭</button><button class="music-dock-open" id="dockOpen">♪</button></div></div><div id="morePopover" class="more-popover" aria-hidden="true"><div class="more-popover-head"><div><b>Mais</b><span>Outras áreas do Zyn</span></div><button class="icon-btn" id="moreClose" aria-label="Fechar">×</button></div><div class="more-grid"><button class="more-item" data-more-view="planning">${uiIcon("plan")}<b>Planejamento</b><span>Lembretes + Metas</span></button><button class="more-item" data-more-view="wellness">${uiIcon("well")}<b>Bem-estar</b><span>GYM + Dietas</span></button><button class="more-item" data-more-view="finance">${uiIcon("finance")}<b>Finanças</b><span>Controle financeiro</span></button><button class="more-item" data-more-view="investments">${uiIcon("finance")}<b>Investimentos</b><span>Carteira e patrimônio</span></button><button class="more-item" data-more-view="music">${uiIcon("music")}<b>Música</b><span>Biblioteca e playlists</span></button><button class="more-item" data-more-view="assistant">${uiIcon("assistant")}<b>Zyn Assistente</b><span>Seu assistente pessoal</span></button></div></div><button id="moreFab" class="more-fab" aria-label="Abrir Mais">${uiIcon("more")}<span>Mais</span></button><nav class="nav"><div class="nav-inner"><button data-view="home" class="${currentView==="home"?"active":""}">${uiIcon("home")}<span>Início</span></button><button data-view="planning" class="${["planning","reminders","goals"].includes(currentView)?"active":""}">${uiIcon("plan")}<span>Planejar</span></button><button data-view="wellness" class="${["wellness","gym","gymWorkout","food","habits"].includes(currentView)?"active":""}">${uiIcon("well")}<span>Bem-estar</span></button><button data-view="finance" class="${["finance","investments"].includes(currentView)?"active":""}">${uiIcon("finance")}<span>Finanças</span></button></div></nav>`;}
 
 function homeView(){
  const goal=activeGoal(), amount=goal?weekEarnings(goal):0, progress=goal?goalProgress(goal):0, today=goal?dayAmount(goal):0, pending=reminders.filter(r=>!r.done).length, gymSessionsCount=gymCount(), finance=financeMonthData(), track=currentMusicTrack(), inv=investmentSummary();
@@ -657,7 +620,7 @@ function authForm(){
 }
 async function readLocalRecords(){
  const stores=["reminders","events","financialAccounts","financialTransactions","financialGoals","workoutPlans","workoutSessions","habits","habitLogs","settings","goals","earnings","gymProfile","gymPlans","gymSessions","foodProfile","mealPlans","shoppingItems","financeProfile","financeAccounts","financeTransactions","financeBills","financeGoals","investmentAssets","musicTracks","musicPlaylists","musicSettings"];
- const out=[];for(const name of stores){const rows=await all(name);for(const row of rows){if(row?.id!==undefined&&row?.id!==null){if(name==="musicTracks"&&row.localOnly&&row.fileBlob) continue;const stamp=row.updatedAt||new Date().toISOString();out.push({storeName:name,recordId:String(row.id),payload:row.updatedAt?row:{...row,updatedAt:stamp},updatedAt:stamp});}}}return out;
+ const out=[];for(const name of stores){const rows=await all(name);for(const row of rows){if(row?.id!==undefined&&row?.id!==null){if(name==="musicTracks"&&row.localOnly&&(row.fileBlob||row.fileData)) continue;const stamp=row.updatedAt||new Date().toISOString();out.push({storeName:name,recordId:String(row.id),payload:row.updatedAt?row:{...row,updatedAt:stamp},updatedAt:stamp});}}}return out;
 }
 async function applyCloudRecord(row){
  if(row.deleted_at){const local=(await all(row.store_name)).find(x=>String(x.id)===String(row.record_id));if(local){await removeLocalOnly(row.store_name,local.id);}return;}
@@ -692,7 +655,25 @@ async function syncAll(reason="auto"){
 function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll("auto"),1200);}
 function bindCloudEvents(){supabase.auth.onAuthStateChange((event,session)=>{authSession=session||null;if(session){scheduleSync();}else{setCloudStatus("offline","Entre na conta para sincronizar");}render();});window.addEventListener("online",()=>syncAll("online"));window.addEventListener("offline",()=>setCloudStatus("offline","Sem internet — alterações ficam no aparelho"));}
 
-async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");investmentAssets=await all("investmentAssets");musicTracks=await all("musicTracks");musicTracks=musicTracks.filter(t=>t.source!=="itunes-preview");musicTracks.forEach(t=>{if(t.fileBlob&&!t.blobUrl){try{t.blobUrl=URL.createObjectURL(t.fileBlob)}catch(e){}}});musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
+async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");investmentAssets=await all("investmentAssets");musicTracks=await all("musicTracks");
+ // YouTube e prévias são removidos da biblioteca: o Zyn trabalha apenas com áudio completo.
+ const unsupported=musicTracks.filter(t=>t.source==="youtube"||t.source==="itunes-preview");
+ for(const t of unsupported){try{await remove("musicTracks",t.id)}catch(e){}}
+ musicTracks=musicTracks.filter(t=>t.source!=="youtube"&&t.source!=="itunes-preview");
+ // Migra arquivos antigos Blob para ArrayBuffer, uma forma mais estável de persistir áudio no IndexedDB.
+ for(const t of musicTracks){
+   try{
+     if(!t.fileData && t.fileBlob instanceof Blob){
+       t.fileData=await t.fileBlob.arrayBuffer();
+       t.mimeType=t.mimeType||t.fileBlob.type||"audio/mpeg";
+       delete t.fileBlob;
+       await put("musicTracks",t);
+     }
+     if(t.fileData && !(t.fileData instanceof ArrayBuffer) && t.fileData?.buffer)t.fileData=t.fileData.buffer;
+     if(t.fileData && !t.blobUrl)t.blobUrl=URL.createObjectURL(new Blob([t.fileData],{type:t.mimeType||"audio/mpeg"}));
+   }catch(e){console.warn("[Zyn Music] blob",e)}
+ }
+ musicSelectedIds=new Set([...musicSelectedIds].filter(id=>musicTracks.some(t=>String(t.id)===String(id))));musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
 }
 function bind(){
  document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
@@ -786,7 +767,7 @@ function bind(){
  document.querySelector("#wellGym")?.addEventListener("click",()=>setView("gym"));
  document.querySelector("#wellDiet")?.addEventListener("click",()=>setView("food"));
  document.querySelectorAll("[data-well-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.wellView)));
- document.querySelector("#musicAddLink")?.addEventListener("click",musicLinkForm);
+
  const openMusicPicker=()=>document.querySelector("#musicFileInput")?.click();
  document.querySelector("#musicAddFile")?.addEventListener("click",openMusicPicker);
  document.querySelector("#musicAddFileTop")?.addEventListener("click",openMusicPicker);
@@ -801,13 +782,14 @@ function bind(){
  document.querySelector("#musicProgress")?.addEventListener("input",e=>{if(musicAudio&&Number.isFinite(musicAudio.duration))musicAudio.currentTime=(Number(e.target.value)/100)*musicAudio.duration;});
  document.querySelector("#musicShuffle")?.addEventListener("click",async()=>{if(!musicTracks.length)return toast("Adicione músicas primeiro");const ids=musicTracks.map(t=>t.id).sort(()=>Math.random()-0.5);musicQueue=ids;musicQueueIndex=0;await playMusicTrack(musicTracks.find(t=>t.id===ids[0]),ids,0);});
  document.querySelectorAll("[data-music-play]").forEach(b=>b.onclick=async()=>{const t=musicTracks.find(x=>x.id===Number(b.dataset.musicPlay));if(t)await playMusicTrack(t,musicTracks.map(x=>x.id),musicTracks.findIndex(x=>x.id===t.id));});
- document.querySelectorAll("[data-music-delete]").forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.musicDelete);if(confirm("Excluir esta música da biblioteca?")){if(String(musicCurrentTrackId)===String(id)){ensureMusicAudio().pause();ensureMusicAudio().removeAttribute("src");musicCurrentTrackId=null;}await remove("musicTracks",id);for(const p of musicPlaylists){if((p.trackIds||[]).includes(id)){p.trackIds=p.trackIds.filter(x=>x!==id);await put("musicPlaylists",p);}}await loadData();render();}});
+ document.querySelectorAll("[data-music-select]").forEach(b=>b.onchange=()=>{const id=String(b.dataset.musicSelect);if(b.checked)musicSelectedIds.add(id);else musicSelectedIds.delete(id);render();});
+ document.querySelector("#musicSelectAll")?.addEventListener("click",()=>{if(musicSelectedIds.size===musicTracks.length)musicSelectedIds.clear();else musicTracks.forEach(t=>musicSelectedIds.add(String(t.id)));render();});
+ document.querySelector("#musicDeleteSelected")?.addEventListener("click",async()=>{const ids=[...musicSelectedIds].map(Number).filter(Number.isFinite);if(!ids.length)return;if(!confirm(`Excluir ${ids.length} música(s) selecionada(s) da biblioteca?`))return;ensureMusicAudio().pause();for(const id of ids){if(String(musicCurrentTrackId)===String(id)){musicAudio.removeAttribute("src");musicCurrentTrackId=null;}await remove("musicTracks",id);for(const p of musicPlaylists){if((p.trackIds||[]).includes(id)){p.trackIds=p.trackIds.filter(x=>x!==id);await put("musicPlaylists",p);}}}musicSelectedIds.clear();await loadData();render();toast(`🗑 ${ids.length} música(s) excluída(s)`);});
 
  document.querySelectorAll("[data-music-playlist]").forEach(b=>b.onclick=async()=>{const p=musicPlaylists.find(x=>String(x.id)===String(b.dataset.musicPlaylist));const ids=(p?.trackIds||[]).filter(id=>musicTracks.some(t=>String(t.id)===String(id)));if(!ids.length)return toast("Essa playlist ainda está vazia");await playMusicTrack(musicTracks.find(t=>String(t.id)===String(ids[0])),ids,0);});
 }
 document.addEventListener("click",e=>{if(!moreMenuOpen)return;if(e.target.closest("#morePopover")||e.target.closest("#moreFab"))return;closeMoreMenu();});
 
-function cleanupYouTubePlayer(){if(youtubePlayer){try{youtubePlayer.pauseVideo?.();youtubePlayer.destroy?.();}catch(e){} youtubePlayer=null;}}
 function render(){
  document.body.className=theme;
  if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}
