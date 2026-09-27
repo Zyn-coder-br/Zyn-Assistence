@@ -117,3 +117,7 @@ Restauradas as funções centrais de IndexedDB, utilitários e funções de apoi
 - Planejar: metas podem ser criadas e editadas.
 - Cabeçalho: identidade reduzida para "Zyn".
 - Service Worker atualizado para v1.8.4.
+
+
+## V1.8.5
+Correção do player de músicas locais: arquivos importados do dispositivo agora são reproduzidos via Blob URL, usando o Blob armazenado no IndexedDB, mesmo sem URL HTTP.
