@@ -97,3 +97,13 @@ Observação: a busca de catálogo usada pelo Zyn fornece apenas prévias. Para 
 
 ## V1.8.2 — correção de inicialização
 Restauradas as funções centrais de IndexedDB, utilitários e funções de apoio que foram omitidas durante a fusão da interface da V1.8.1.
+
+## V1.8.3 — Interfaces e funcionalidades seguintes
+- Finanças: interfaces separadas para Visão Geral, Cartões, Gastos e Metas.
+- Cartões e metas financeiras com cadastro, edição e exclusão local.
+- GYM: o botão + de cada dia abre o editor do treino e permite editar exercícios.
+- Planejar: meta ativa pode ser editada diretamente na tela principal.
+- Música: biblioteca local aceita arquivos de áudio completos do aparelho, sem depender das prévias do iTunes.
+- Mais: removido da barra inferior e transformado em botão flutuante no canto inferior direito; o painel fecha ao clicar novamente ou fora dele.
+- Cabeçalho global passa a mostrar apenas “Zyn”.
+- Barra inferior passa a ter quatro itens: Início, Planejar, Bem-estar e Finanças.
