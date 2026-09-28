@@ -1,3 +1,7 @@
+Zyn Assistente — V1.9.5
+
+Base: V1.9.4 aprovada. Esta versão refina a iconografia profissional, com foco em Planejar, GYM e Finanças, preservando as funcionalidades aprovadas.
+
 # Zyn Assistente — V1.7.0
 
 ## Zyn Cloud + Login + sincronização
