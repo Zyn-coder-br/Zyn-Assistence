@@ -1,4 +1,4 @@
-const CACHE_NAME = "assistente-zyn-v2.0.0";
+const CACHE_NAME = "assistente-zyn-v2.0.1";
 const SHELL = [
   "./",
   "./index.html",

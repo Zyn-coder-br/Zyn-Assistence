@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.0.0
+# Zyn Assistente — V2.0.1
 
 Base: V1.9.9 aprovada.
 
