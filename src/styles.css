@@ -314,10 +314,3 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .icon-btn .ui-icon{width:18px;height:18px}
 .more-fab,.more-popover{display:none!important}
 @media(max-width:700px){.nav-inner{padding:6px 7px;gap:5px}.nav button{min-height:60px;font-size:9px}.nav button .ui-icon{width:20px;height:20px}}
-
-
-/* V2.0.0 — Dieta e Hábitos */
-.habit-check{min-width:42px;min-height:42px;display:grid;place-items:center;border-radius:12px;cursor:pointer;}
-.habit-check.done{background:linear-gradient(135deg,var(--primary),#8f6cff);color:#fff;}
-.food-tab-content{display:grid;gap:16px;}
-.food-tabs{margin-bottom:4px;}
