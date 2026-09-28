@@ -1,6 +1,6 @@
-Zyn Assistente — V1.9.5
+Zyn Assistente — V1.9.6
 
-Base: V1.9.4 aprovada. Esta versão refina a iconografia profissional, com foco em Planejar, GYM e Finanças, preservando as funcionalidades aprovadas.
+Base: V1.9.5 aprovada. Esta versão fecha o primeiro painel completo do Zyn: Planejar, com Hoje, Semana, Metas e Lembretes, preservando Música, Finanças e a iconografia aprovada.
 
 # Zyn Assistente — V1.7.0
 
@@ -145,3 +145,17 @@ Correção do player de músicas locais: arquivos importados do dispositivo agor
 - Reforço visual dos modais existentes sem alterar regras de negócio.
 - Substituição dos emojis de interface por SVGs profissionais reutilizáveis.
 - Mantidos Finance 2.0, Música, IndexedDB, Supabase, navegação e PWA.
+
+## V1.9.6 — Planejar
+- Base direta: V1.9.5 aprovada.
+- Painel Planejar organizado em quatro áreas funcionais: Hoje, Semana, Metas e Lembretes.
+- Hoje: agenda do dia, pendências, meta ativa e ganho registrado no dia.
+- Semana: visão dos sete dias, lembretes por dia, concluídos e resumo semanal.
+- Metas: criação, edição, exclusão, registro de ganho e progresso diário.
+- Lembretes: separação entre pendentes e concluídos, edição pelo item e criação rápida.
+- Mantidos Financeiro, Música, GYM, Bem-estar, IndexedDB, Supabase, PWA e sistema de modais Zyn.
+- Service Worker atualizado para V1.9.6.
+
+### Testes técnicos
+- `node --check src/app.js` sem erros de sintaxe.
+- Verificação dos ícones utilizados pelo novo painel.
