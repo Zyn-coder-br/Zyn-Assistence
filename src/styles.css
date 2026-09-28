@@ -251,10 +251,27 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .finance-wallet-total span,.finance-wallet-total small{display:block;color:var(--muted);font-size:11px}.finance-wallet-total b{display:block;font-size:29px;margin:4px 0}.finance-balance-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}.finance-balance-chip{padding:12px;border:1px solid var(--border);border-radius:15px;background:rgba(255,255,255,.018);min-width:0}.finance-balance-chip span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.finance-balance-chip b{display:block;font-size:16px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.finance-cash-item{border-color:rgba(155,124,255,.35)}
 @media(max-width:700px){.finance-balance-grid{grid-template-columns:1fr 1fr}.finance-wallet-total b{font-size:25px}}
 
-/* V1.9.4 — Zyn visual system: unified dialogs, icon language and Planning tabs */
-.icon-label{display:inline-flex;align-items:center;justify-content:center;gap:7px;vertical-align:middle}.icon-label .ui-icon,.btn>.ui-icon,.panel-heading h3>.ui-icon,.finance-balance-chip .ui-icon{width:16px;height:16px;flex:0 0 16px}.module-icon>.ui-icon{width:25px;height:25px}.quick-icon>.ui-icon{width:22px;height:22px}.row-icon>.ui-icon{width:18px;height:18px}.music-control>.ui-icon,.music-dock-btn>.ui-icon,.music-dock-open>.ui-icon{width:18px;height:18px}
-.modal-backdrop{opacity:0;transition:opacity .14s ease;background:rgba(12,9,24,.66);backdrop-filter:blur(8px)}.modal-backdrop.is-open{opacity:1}.modal.zyn-modal{box-shadow:0 28px 80px rgba(0,0,0,.35);animation:zynModalIn .16s ease both}.zyn-modal>.row:first-child,.zyn-modal>.custom-modal-head{padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:16px}.zyn-modal>.row:first-child h2{margin:0;font-size:21px}.zyn-modal>.row:first-child>.btn,.zyn-modal>.custom-modal-head>.icon-btn{width:38px;height:38px;padding:0;display:grid;place-items:center}.zyn-modal form>.btn:last-child{min-height:44px}.zyn-modal .panel-card{background:var(--surface2);box-shadow:none}.zyn-modal .actions{flex-wrap:wrap}.zyn-modal input:focus,.zyn-modal select:focus,.zyn-modal textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
+/* V1.9.4 — sistema visual global Zyn */
+.zyn-modal-open{overflow:hidden}
+.zyn-modal{z-index:1000;background:rgba(10,8,20,.72);backdrop-filter:blur(8px)}
+.zyn-modal .modal{box-shadow:0 28px 80px rgba(0,0,0,.38);animation:zynModalIn .16s ease-out}
+.custom-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:18px}
+.custom-modal-head h2{margin:2px 0 6px}
+.custom-modal-head p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.ui-icon{width:1.15em;height:1.15em;display:inline-block;vertical-align:-.18em;flex:none}
+.module-icon .ui-icon{width:26px;height:26px}
+.quick-icon .ui-icon,.row-icon .ui-icon,.panel-icon .ui-icon{width:20px;height:20px}
+.btn .ui-icon,.icon-btn .ui-icon,.soft-tag .ui-icon{margin-right:5px}
 @keyframes zynModalIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-.planning-tabs{overflow-x:auto;scrollbar-width:none}.planning-tabs::-webkit-scrollbar{display:none}.planning-tabs button{white-space:nowrap}.planning-goal-row{padding:15px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(145deg,var(--surface),var(--surface2))}.planning-week-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.planning-day-card{padding:13px 8px;text-align:center;border:1px solid var(--border);border-radius:16px;background:var(--surface2)}.planning-day-card span,.planning-day-card small{display:block;color:var(--muted);font-size:11px}.planning-day-card b{display:block;font-size:22px;margin:5px 0}.planning-day-card.today{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 15%,transparent)}
-.music-control,.music-dock-btn,.music-dock-open{display:inline-flex;align-items:center;justify-content:center}.music-control>.ui-icon,.music-dock-btn>.ui-icon{stroke:currentColor}.quick-icon{display:grid;place-items:center}.module-head>.module-icon{display:grid;place-items:center}.more-item>.ui-icon{width:22px;height:22px}
-@media(max-width:700px){.planning-week-grid{grid-template-columns:repeat(4,1fr)}.zyn-modal>.row:first-child h2{font-size:19px}.icon-label{gap:6px}}
+@media(max-width:700px){.zyn-modal{padding:12px}.zyn-modal .modal{max-height:calc(100vh - 24px);border-radius:20px;padding:17px}}
+
+/* Zyn V1.9.4 — modal global */
+.zyn-modal{z-index:1000;background:rgba(10,8,20,.72);backdrop-filter:blur(8px)}
+.zyn-modal .modal{box-shadow:0 28px 80px rgba(0,0,0,.38);animation:zynModalIn .16s ease-out}
+.custom-modal-head,.zyn-modal .modal>.row:first-child{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.custom-modal-head h2{margin:2px 0 6px}.custom-modal-head p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.ui-icon{width:1.15em;height:1.15em;display:inline-block;vertical-align:-.18em;flex:none}
+.module-icon .ui-icon{width:26px;height:26px}.quick-icon .ui-icon,.row-icon .ui-icon,.panel-icon .ui-icon{width:20px;height:20px}
+.btn .ui-icon,.icon-btn .ui-icon,.soft-tag .ui-icon{margin-right:5px}
+@keyframes zynModalIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+@media(max-width:700px){.zyn-modal{padding:12px}.zyn-modal .modal{max-height:calc(100vh - 24px);border-radius:20px;padding:17px}}
