@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.0.2";
+const APP_VERSION = "2.0.3";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.0.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.0.3", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -478,8 +478,15 @@ function gymProgressView(){
 }
 function gymHistoryView(){
  const rows=gymSessions.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,20);
- return `<div class="gym-tab-content"><div class="section-title"><div><span class="eyebrow">REGISTROS</span><h2>Histórico</h2></div><span class="soft-tag">${gymSessions.length} registro(s)</span></div><section class="panel-card"><div class="modern-list">${rows.map(s=>`<div class="modern-list-row"><div class="row-icon">${uiIcon(s.type==="Treino de academia"?"gym":"activity")}</div><div class="row-main"><b>${esc(s.workout||s.type||"Atividade")}</b><span>${fmtDate(s.date)}${s.duration?` • ${s.duration} min`:""}${Array.isArray(s.records)?` • ${s.records.length} exercícios`:""}</span></div><span class="soft-tag">Concluído</span></div>`).join("")||'<div class="empty">Nenhum treino registrado ainda.</div>'}</div></section></div>`;
+ return `<div class="gym-tab-content"><div class="section-title"><div><span class="eyebrow">REGISTROS</span><h2>Histórico</h2></div><span class="soft-tag">${gymSessions.length} registro(s)</span></div><section class="panel-card"><div class="modern-list">${rows.map(s=>`<button class="modern-list-row" type="button" data-gym-history="${s.id}"><div class="row-icon">${uiIcon(s.type==="Treino de academia"?"gym":"activity")}</div><div class="row-main"><b>${esc(s.workout||s.type||"Atividade")}</b><span>${fmtDate(s.date)}${s.duration?` • ${s.duration} min`:""}${Array.isArray(s.records)?` • ${s.records.length} exercícios`:""}</span></div><span class="soft-tag">Concluído</span></button>`).join("")||'<div class="empty">Nenhum treino registrado ainda.</div>'}</div></section></div>`;
 }
+function gymHistoryDetail(id){
+ const s=gymSessions.find(x=>Number(x.id)===Number(id)); if(!s)return;
+ const rows=Array.isArray(s.records)?s.records:[];
+ const el=modal(`<div class="row"><div><span class="eyebrow">HISTÓRICO</span><h2>${esc(s.workout||s.type||"Treino")}</h2><div class="muted">${fmtDate(s.date)}${s.completedAt?" • finalizado": ""}</div></div><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><div class="modern-list">${rows.map(r=>`<div class="modern-list-row"><div class="row-icon">${r.done?uiIcon("check"):uiIcon("gym")}</div><div class="row-main"><b>${esc(r.exercise)}</b><span>${r.load||0} kg • ${r.reps||0} repetições</span></div><span class="soft-tag">${r.done?"Concluído":"Registrado"}</span></div>`).join("")||'<div class="empty">Sem detalhes registrados.</div>'}</div>`);
+ el.querySelector("#close").onclick=()=>closeModal(el);
+}
+
 function gymView(){
  const t=gymToday(), w=gymWeek(), c=gymCount();
  const tabs=[['week','Minha semana','calendar'],['exercises','Exercícios','gym'],['progress','Progresso','chart'],['history','Histórico','receipt']];
@@ -489,11 +496,14 @@ function gymView(){
 
 function gymWorkout(){
  const p=gymToday(), ex=gymExercises(p);
- return `<div class="section-title"><h2>${esc(p.workout)}</h2><button class="btn" id="backGym">${uiIcon("back")} GYM</button></div>
- <section class="card full"><h3>Treino de hoje</h3><p class="muted">Comece com carga confortável e priorize aprender a técnica. O Zyn vai guardar seu histórico.</p></section>
- <div class="stack">${ex.map((e,i)=>`<section class="card full"><h3>${i+1}. ${esc(e[0])}</h3><div class="muted">${esc(e[1])} • ${e[2]} séries • ${e[3]} repetições • ${e[4]} descanso</div><div class="form-grid" style="margin-top:12px"><div class="field"><label>Carga (kg)</label><input data-load="${i}" type="number" min="0" step=".5"></div><div class="field"><label>Repetições</label><input data-reps="${i}" type="number" min="0"></div></div><button class="btn" data-done="${i}" style="margin-top:10px">${uiIcon("check")} Marcar concluído</button></section>`).join("")}
- <button class="btn primary" id="finishGym" style="width:100%">${uiIcon("flag")} Finalizar treino</button></div>`;
+ const todaySession=gymSessions.find(s=>s.date===todayISO()&&s.type==="Treino de academia"&&s.workout===p.workout);
+ const previous=[...gymSessions].filter(s=>s.workout===p.workout&&s.date<todayISO()).sort((a,b)=>(b.date||"").localeCompare(a.date||""))[0];
+ return `<div class="section-title"><div><span class="eyebrow">TREINO EM ANDAMENTO</span><h2>${esc(p.workout)}</h2><div class="muted">Registre carga, repetições e exercícios concluídos.</div></div><button class="btn" id="backGym">${uiIcon("back")} GYM</button></div>
+ <section class="feature-card gym-feature"><div class="feature-top"><div><span class="eyebrow">HOJE</span><h2>${esc(p.label)} • ${esc(p.workout)}</h2><p>${ex.length} exercício(s) planejado(s)${previous?' • último registro em '+fmtDate(previous.date):''}</p></div><span class="soft-tag">${todaySession?'Registrado hoje':'Em andamento'}</span></div></section>
+ <div class="stack">${ex.map((e,i)=>`<section class="card full gym-exercise-session ${todaySession?.records?.[i]?.done?'completed':''}" data-ex-card="${i}"><div class="row"><div><span class="eyebrow">EXERCÍCIO ${i+1}</span><h3>${esc(e[0])}</h3><div class="muted">${esc(e[1])} • ${e[2]} séries • ${e[3]} repetições • descanso ${e[4]}</div></div><button type="button" class="btn" data-done="${i}">${todaySession?.records?.[i]?.done?uiIcon("check")+' Concluído':uiIcon("check")+' Marcar concluído'}</button></div><div class="form-grid" style="margin-top:12px"><div class="field"><label>Carga (kg)</label><input data-load="${i}" type="number" min="0" step="0.5" value="${todaySession?.records?.[i]?.load??''}"></div><div class="field"><label>Repetições realizadas</label><input data-reps="${i}" type="number" min="0" value="${todaySession?.records?.[i]?.reps??''}"></div></div></section>`).join("")}
+ <button class="btn primary" id="finishGym" style="width:100%">${uiIcon("flag")} ${todaySession?'Atualizar treino':'Finalizar treino'}</button></div>`;
 }
+
 function gymProfileForm(){
  const p=gymProfile||{}, el=modal(`<div class="row"><h2>Meu perfil GYM</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="gp" class="stack"><div class="form-grid">
  <div class="field"><label>Objetivo</label><select name="goal"><option value="cut" ${p.goal==="cut"||!p.goal?"selected":""}>Perder gordura</option><option value="mass" ${p.goal==="mass"?"selected":""}>Ganhar massa</option><option value="maintain" ${p.goal==="maintain"?"selected":""}>Manter</option></select></div>
@@ -507,7 +517,7 @@ function gymProfileForm(){
 function gymWeekForm(){
  const w=gymWeek(),el=modal(`<div class="row"><h2>Editar minha semana</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="gw" class="stack">${w.map(d=>`<div class="field"><label>${d.label}</label><select name="t${d.day}"><option value="gym">Treino</option><option value="optional">Opcional</option><option value="rest">Descanso</option></select><input name="w${d.day}" value="${esc(d.workout)}" style="margin-top:6px"></div>`).join("")}<button class="btn primary">Salvar semana</button></form>`);
  w.forEach(d=>el.querySelector(`[name="t${d.day}"]`).value=d.type);el.querySelector("#close").onclick=()=>closeModal(el);
- el.querySelector("#gw").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);for(const d of w)await put("gymPlans",{day:d.day,label:d.label,type:f.get("t"+d.day),workout:f.get("w"+d.day)});await loadData();closeModal(el);render();toast("Semana atualizada")};
+ el.querySelector("#gw").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);for(const d of w){const current=gymPlans.find(x=>x.day===d.day);await put("gymPlans",{...(current?.id?{id:current.id}:{}),day:d.day,label:d.label,type:f.get("t"+d.day),workout:f.get("w"+d.day),exercises:current?.exercises||[]});}await loadData();closeModal(el);render();toast("Semana atualizada")};
 }
 function beachForm(){
  const el=modal(`<div class="row"><h2>${uiIcon("activity")} Caminhada / Corrida</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="bw" class="stack"><div class="form-grid"><div class="field"><label>Atividade</label><select name="type"><option>Caminhada na praia</option><option>Corrida na praia</option></select></div><div class="field"><label>Data</label><input name="date" type="date" value="${todayISO()}"></div><div class="field"><label>Duração (min)</label><input name="duration" type="number" min="1" value="30"></div></div><button class="btn primary">Registrar</button></form>`);
@@ -981,11 +991,12 @@ function bind(){
  document.querySelectorAll("[data-gym-open]").forEach(b=>b.addEventListener("click",e=>{if(e.target.closest("button"))return;gymDayForm(b.dataset.gymOpen)}));
  document.querySelector("#editWeek")?.addEventListener("click",gymWeekForm);
  document.querySelectorAll("[data-gym-edit]").forEach(b=>b.addEventListener("click",()=>gymDayForm(b.dataset.gymEdit)));
+ document.querySelectorAll("[data-gym-history]").forEach(b=>b.addEventListener("click",()=>gymHistoryDetail(Number(b.dataset.gymHistory))));
  document.querySelector("#startGym")?.addEventListener("click",()=>{currentView="gymWorkout";render()});
  document.querySelector("#backGym")?.addEventListener("click",()=>{currentView="gym";render()});
  document.querySelector("#beachWalk")?.addEventListener("click",beachForm);
- document.querySelector("#finishGym")?.addEventListener("click",async()=>{const p=gymToday(), ex=GYM_EX[p.workout]||[];const records=ex.map((x,i)=>({exercise:x[0],load:Number(document.querySelector(`[data-load="${i}"]`)?.value||0),reps:Number(document.querySelector(`[data-reps="${i}"]`)?.value||0)}));await put("gymSessions",{date:todayISO(),type:"Treino de academia",workout:p.workout,records});await loadData();toast("Treino salvo");currentView="gym";render()});
- document.querySelectorAll("[data-done]").forEach(b=>b.onclick=()=>{b.textContent="✓ Concluído";b.classList.add("primary")});
+ document.querySelector("#finishGym")?.addEventListener("click",async()=>{const p=gymToday(), ex=gymExercises(p);const existing=gymSessions.find(s=>s.date===todayISO()&&s.type==="Treino de academia"&&s.workout===p.workout);const records=ex.map((x,i)=>{const card=document.querySelector(`[data-ex-card="${i}"]`);return {exercise:x[0],load:Number(card?.querySelector(`[data-load="${i}"]`)?.value||0),reps:Number(card?.querySelector(`[data-reps="${i}"]`)?.value||0),done:card?.classList.contains("completed")||false};});await put("gymSessions",{...(existing?.id?{id:existing.id}:{}),date:todayISO(),type:"Treino de academia",workout:p.workout,records,completedAt:new Date().toISOString()});await loadData();toast("Treino salvo com sucesso");currentView="gym";render()});
+ document.querySelectorAll("[data-done]").forEach(b=>b.onclick=()=>{const card=b.closest("[data-ex-card]");card?.classList.toggle("completed");b.innerHTML=card?.classList.contains("completed")?uiIcon("check")+" Concluído":uiIcon("check")+" Marcar concluído"});
  document.querySelector("#financeProfileBtn")?.addEventListener("click",financeProfileForm);
  document.querySelectorAll("[data-finance-tab]").forEach(b=>b.addEventListener("click",()=>{financeTab=b.dataset.financeTab;render();}));
  document.querySelector("#financeCardAdd")?.addEventListener("click",()=>financeCardForm());
