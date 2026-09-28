@@ -1,23 +1,6 @@
-# Zyn Assistente — V2.0.1
+# Zyn Assistente V2.0.2
 
-Base: V1.9.9 aprovada.
+Recovery build based strictly on the user-approved V1.9.9.
+No new feature code is included in this recovery build. It only bumps application/cache versions to prevent stale deployment.
 
-## Etapa
-Dieta + Hábitos dentro de Bem-estar.
-
-### Dieta
-- abas Hoje, Planejamento, Alimentos e Progresso;
-- edição das refeições por dia;
-- geração da base semanal;
-- lista de compras funcional;
-- perfil alimentar preservado;
-- acompanhamento do planejamento semanal.
-
-### Hábitos
-- criar, editar e excluir hábitos;
-- marcar/desmarcar conclusão do dia;
-- registro persistido em IndexedDB;
-- visão semanal de consistência;
-- integração com sincronização já existente.
-
-Música, Finanças, Planejar e GYM permanecem preservados.
+Use this version to restore the approved base before continuing with Dieta/Hábitos.
