@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "1.9.4";
+const APP_VERSION = "1.9.6";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "1.9.4", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "1.9.6", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -15,6 +15,7 @@ const DB_VERSION = 12;
 let db;
 let currentView = "home";
 let financeTab = "overview";
+let planningTab = "today";
 let moreMenuOpen = false;
 let theme = localStorage.getItem("zyn-theme") || "dark";
 let reminders = [];
@@ -388,6 +389,10 @@ function uiIcon(name){const paths={
  more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
  moreFunctions:'<path d="M5 7h8M5 17h5M17 7h2M14 17h5"/><circle cx="16" cy="7" r="2"/><circle cx="11" cy="17" r="2"/>',
  calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="m8 14 1.5 1.5L12 13"/><path d="M14 14h2"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ check:'<path d="m5 12 4 4L19 7"/>',
+ bell:'<path d="M6 10a6 6 0 0 1 12 0v4l2 3H4l2-3z"/><path d="M10 20h4"/>',
+ goal:'<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
  settings:'<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/><path d="M4 12H2m20 0h-2M12 4V2m0 20v-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M17.7 6.3l1.4-1.4M4.9 19.1l1.4-1.4"/',
  edit:'<path d="m4 16-.8 4.8L8 20l11-11-4-4z"/><path d="m13.5 6.5 4 4"/'
 };return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.home}</svg>`}
@@ -550,9 +555,74 @@ function homeView(){
  <section class="feature-card home-focus"><div><span class="eyebrow">META DA SEMANA</span><h2>${goal?esc(goal.name):"Crie sua primeira meta"}</h2><p>${goal?`${money(amount)} de ${money(goal.target)} nesta semana`:`Comece pelo Planejar para acompanhar sua meta.`}</p>${goal?`<div class="progress"><div style="width:${progress}%"></div></div><span class="muted">Hoje: ${money(today)} • ${progress.toFixed(0)}% concluído</span>`:`<button class="btn primary" id="homePlanning">Abrir Planejamento</button>`}</div><div class="focus-value">${goal?progress.toFixed(0)+"%":"—"}</div></section>
  <div class="home-bottom-grid"><section class="panel-card"><div class="panel-heading"><div><h3>Música: Tocando agora</h3><span>${esc(track?.artist||"Zyn Music")}</span></div><button class="btn" id="homeMusic">Abrir</button></div><b>${esc(track?.title||"Nenhuma música selecionada")}</b></section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("pin")} Resumo rápido</h3><span>Hoje</span></div></div><div class="mini-summary"><div><b>${pending}</b><span>Lembretes</span></div><div><b>${gymSessionsCount}</b><span>Treinos</span></div><div><b>${financeTransactions.length}</b><span>Lançamentos</span></div></div></section></div></div>`;
 }
+function planningTabButton(id,label,icon=""){
+ return `<button data-planning-tab="${id}" class="${planningTab===id?"active":""}">${icon?uiIcon(icon):""}${label}</button>`;
+}
+function planningReminderRow(r){
+ const today=r.date===todayISO(), overdue=!r.done&&r.date&&r.date<todayISO();
+ return `<div class="modern-list-row planning-reminder-row ${r.done?"done":""}" data-planning-reminder="${r.id}" role="button" tabindex="0">
+   <div class="row-icon">${uiIcon(r.done?"check":"calendar")}</div>
+   <div class="row-main"><b>${esc(r.title)}</b><span>${esc(r.category||"Geral")} • ${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</span>${r.notes?`<small>${esc(r.notes)}</small>`:""}</div>
+   <span class="soft-tag ${overdue?"planning-overdue":""}">${r.done?"Concluído":overdue?"Atrasado":today?"Hoje":"Pendente"}</span>
+ </div>`;
+}
+function planningTodayView(){
+ const today=todayISO();
+ const todayReminders=reminders.filter(r=>r.date===today).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99"));
+ const pendingToday=todayReminders.filter(r=>!r.done).length;
+ const goal=activeGoal();
+ const amount=goal?weekEarnings(goal):0;
+ const p=goal?goalProgress(goal):0;
+ const todayGain=goal?dayAmount(goal,today):earnings.filter(e=>e.date===today).reduce((s,e)=>s+Number(e.amount||0),0);
+ return `<div class="planning-tab-content">
+  <section class="feature-card planning-feature"><div>
+   <span class="eyebrow">HOJE</span><h2>${new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</h2>
+   <p>${pendingToday?`Você tem ${pendingToday} pendência(s) para hoje.`:"Sua agenda de hoje está em dia."}</p>
+   <div class="feature-actions"><button class="btn primary" id="planningReminder">+ Novo lembrete</button>${goal?`<button class="btn" id="planningEditGoal">${uiIcon("edit")} Editar meta</button>`:`<button class="btn" id="planningGoal">+ Criar meta</button>`}</div>
+  </div><div class="focus-value">${pendingToday}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("calendar")} Agenda de hoje</h3><span>${todayReminders.length} item(ns) cadastrados</span></div><span class="soft-tag">${pendingToday} pendente(s)</span></div>
+   <div class="modern-list">${todayReminders.map(planningReminderRow).join("")||'<div class="empty">Nenhum lembrete para hoje. Aproveite para organizar seu dia.</div>'}</div>
+  </section>
+  <div class="stat-grid three">
+   <section class="stat-card"><span>Meta semanal</span><b>${goal?p.toFixed(0)+"%":"—"}</b><small>${goal?money(amount)+" de "+money(goal.target):"Nenhuma meta ativa"}</small></section>
+   <section class="stat-card"><span>Ganho de hoje</span><b>${money(todayGain)}</b><small>registrado hoje</small></section>
+   <section class="stat-card"><span>Pendências</span><b>${reminders.filter(r=>!r.done).length}</b><small>em todos os dias</small></section>
+  </div>
+ </div>`;
+}
+function planningWeekView(){
+ const days=getCurrentWeekDays();
+ const labels=["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
+ return `<div class="planning-tab-content">
+  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("calendar")} Esta semana</h3><span>Visão dos seus lembretes por dia</span></div><span class="soft-tag">${reminders.filter(r=>!r.done).length} pendente(s)</span></div>
+   <div class="planning-week-grid">${days.map((d,i)=>{const list=reminders.filter(r=>r.date===d).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99"));const done=list.filter(r=>r.done).length;return `<article class="planning-day-card ${d===todayISO()?"today":""}"><div class="planning-day-head"><div><b>${labels[i]}</b><span>${fmtDate(d)}</span></div><strong>${done}/${list.length}</strong></div><div class="planning-day-list">${list.slice(0,4).map(r=>`<button class="planning-day-item ${r.done?"done":""}" data-planning-reminder="${r.id}"><span>${uiIcon(r.done?"check":"calendar")}</span><b>${esc(r.title)}</b><small>${r.time?esc(r.time):"Sem horário"}</small></button>`).join("")||'<span class="planning-day-empty">Livre</span>'}</div>${list.length>4?`<small class="muted">+${list.length-4} item(ns)</small>`:""}</article>`}).join("")}</div>
+  </section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Resumo semanal</h3><span>Planejamento e progresso</span></div><button class="btn primary" id="planningReminder">+ Lembrete</button></div>
+   <div class="stat-grid three"><div class="stat-card"><span>Total de lembretes</span><b>${reminders.filter(r=>getCurrentWeekDays().includes(r.date)).length}</b><small>nesta semana</small></div><div class="stat-card"><span>Concluídos</span><b>${reminders.filter(r=>getCurrentWeekDays().includes(r.date)&&r.done).length}</b><small>finalizados</small></div><div class="stat-card"><span>Meta semanal</span><b>${activeGoal()?goalProgress(activeGoal()).toFixed(0)+"%":"—"}</b><small>progresso atual</small></div></div>
+  </section>
+ </div>`;
+}
+function planningGoalsView(){
+ const active=activeGoal();
+ return `<div class="planning-tab-content">
+  <div class="section-title"><div><span class="eyebrow">OBJETIVOS</span><h2>Minhas metas</h2></div><button class="btn primary" id="planningGoal">+ Nova meta</button></div>
+  <div class="stack">${goals.map(g=>{const amount=weekEarnings(g),p=goalProgress(g);return `<section class="panel-card planning-goal-card"><div class="panel-heading"><div><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span>${g.active===false?"Inativa":"Meta semanal ativa"}</span></div><span class="soft-tag">${p.toFixed(0)}%</span></div><div class="planning-goal-values"><div><b>${money(amount)}</b><span>realizado</span></div><div><b>${money(g.target)}</b><span>objetivo</span></div><div><b>${money(g.dailyTarget)}</b><span>meta diária</span></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="actions" style="margin-top:14px"><button class="btn primary" data-goal-earning="${g.id}">+ Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">Excluir</button></div></section>`}).join("")||'<div class="empty">Nenhuma meta cadastrada. Crie uma meta para começar a acompanhar seu progresso.</div>'}</div>
+  ${active?`<section class="panel-card"><div class="panel-heading"><div><h3>Progresso diário</h3><span>${esc(active.name)}</span></div><span class="soft-tag">${pLabel(goalProgress(active))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(active,d),hit=val>=active.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div></section>`:""}
+ </div>`;
+}
+function pLabel(value){return `${Number(value||0).toFixed(0)}% concluído`}
+function planningRemindersView(){
+ const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||""));
+ const done=reminders.filter(r=>r.done).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+ return `<div class="planning-tab-content"><div class="section-title"><div><span class="eyebrow">AGENDA</span><h2>Lembretes</h2></div><button class="btn primary" id="planningReminder">+ Novo lembrete</button></div>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Pendentes</h3><span>${pending.length} aguardando</span></div><span class="soft-tag">${pending.filter(r=>r.date===todayISO()).length} hoje</span></div><div class="modern-list">${pending.map(planningReminderRow).join("")||'<div class="empty">Nenhum lembrete pendente.</div>'}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Concluídos</h3><span>${done.length} finalizado(s)</span></div></div><div class="modern-list">${done.slice(0,12).map(planningReminderRow).join("")||'<div class="empty">Nenhum lembrete concluído ainda.</div>'}</div>${done.length>12?'<p class="muted">Mostrando os 12 concluídos mais recentes.</p>':''}</section>
+ </div>`;
+}
 function planningView(){
- const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,6),goal=activeGoal(),amount=goal?weekEarnings(goal):0,p=goal?goalProgress(goal):0;
- return `<div class="module-page"><div class="module-head"><div class="module-icon">${uiIcon("plan")}</div><div class="module-head-copy"><h1>Planejar</h1><p>Organize tarefas, metas e compromissos</p></div><button class="btn primary" id="planningGoal">+ Meta</button></div><div class="module-tabs"><button class="active">Hoje</button><button>Semana</button><button>Metas</button><button>Lembretes</button></div><section class="feature-card planning-feature"><div><span class="eyebrow">META ATIVA</span><h2>${goal?esc(goal.name):"Crie sua primeira meta"}</h2><p>${goal?`${money(amount)} de ${money(goal.target)} nesta semana`:"Defina uma meta para acompanhar seu progresso."}</p>${goal?`<div class="progress"><div style="width:${p}%"></div></div><span class="muted">${p.toFixed(0)}% concluído • meta diária ${money(goal.dailyTarget)}</span><div class="actions" style="margin-top:12px"><button class="btn" id="planningEditGoal">${uiIcon("edit")} Editar meta</button><button class="btn" id="planningGoals">Ver metas</button></div>`:`<button class="btn primary" id="planningGoals">Criar meta</button>`}</div><div class="focus-value">${goal?p.toFixed(0)+"%":"+"}</div></section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("calendar")} Próximos lembretes</h3><span>${reminders.filter(r=>!r.done).length} pendentes</span></div><button class="btn" id="planningReminder">+ Lembrete</button></div><div class="modern-list">${pending.map(r=>`<div class="modern-list-row"><div class="row-icon">◷</div><div class="row-main"><b>${esc(r.title)}</b><span>${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</span></div><span class="soft-tag">Pendente</span></div>`).join("")||'<div class="empty">Nenhum lembrete pendente.</div>'}</div><button class="btn" id="planningReminders" style="margin-top:12px">Ver todos</button></section><div class="stat-grid three"><section class="stat-card"><span>Lembretes concluídos</span><b>${reminders.filter(r=>r.done).length}</b><small>total</small></section><section class="stat-card"><span>Metas cadastradas</span><b>${goals.length}</b><small>ativas</small></section><section class="stat-card"><span>Ganhos na semana</span><b>${money(earnings.filter(e=>getCurrentWeekDays().includes(e.date)).reduce((s,e)=>s+Number(e.amount||0),0))}</b><small>registrados</small></section></div></div>`;
+ const tabs=[planningTabButton("today","Hoje","home"),planningTabButton("week","Semana","calendar"),planningTabButton("goals","Metas","goal"),planningTabButton("reminders","Lembretes","bell")].join("");
+ let body=planningTab==="week"?planningWeekView():planningTab==="goals"?planningGoalsView():planningTab==="reminders"?planningRemindersView():planningTodayView();
+ return `<div class="module-page"><div class="module-head"><div class="module-icon">${uiIcon("plan")}</div><div class="module-head-copy"><span class="eyebrow">ORGANIZAÇÃO</span><h1>Planejar</h1><p>Organize tarefas, metas e lembretes em um só lugar</p></div><button class="icon-btn" id="planningQuickReminder" aria-label="Novo lembrete">${uiIcon("plus")}</button></div><div class="module-tabs planning-tabs">${tabs}</div>${body}</div>`;
 }
 function wellnessView(){
  const t=gymToday(),c=gymCount(),shopping=shoppingItems.filter(x=>!x.done).length;
@@ -915,11 +985,75 @@ function bind(){
  document.querySelector("#homeMusic")?.addEventListener("click",()=>setView("music"));
  document.querySelectorAll("[data-home-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.homeView)));
  document.querySelector("#homePlanning")?.addEventListener("click",()=>setView("planning"));
- document.querySelector("#planningReminder")?.addEventListener("click",()=>reminderForm());
- document.querySelector("#planningGoal")?.addEventListener("click",()=>goalForm());
- document.querySelector("#planningEditGoal")?.addEventListener("click",()=>{const g=activeGoal();if(g)goalForm(g);});
- document.querySelector("#planningReminders")?.addEventListener("click",()=>setView("reminders"));
- document.querySelector("#planningGoals")?.addEventListener("click",()=>setView("goals"));
+function planningTabButton(id,label,icon=""){
+ return `<button data-planning-tab="${id}" class="${planningTab===id?"active":""}">${icon?uiIcon(icon):""}${label}</button>`;
+}
+function planningReminderRow(r){
+ const today=r.date===todayISO(), overdue=!r.done&&r.date&&r.date<todayISO();
+ return `<div class="modern-list-row planning-reminder-row ${r.done?"done":""}" data-planning-reminder="${r.id}" role="button" tabindex="0">
+   <div class="row-icon">${uiIcon(r.done?"check":"calendar")}</div>
+   <div class="row-main"><b>${esc(r.title)}</b><span>${esc(r.category||"Geral")} • ${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</span>${r.notes?`<small>${esc(r.notes)}</small>`:""}</div>
+   <span class="soft-tag ${overdue?"planning-overdue":""}">${r.done?"Concluído":overdue?"Atrasado":today?"Hoje":"Pendente"}</span>
+ </div>`;
+}
+function planningTodayView(){
+ const today=todayISO();
+ const todayReminders=reminders.filter(r=>r.date===today).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99"));
+ const pendingToday=todayReminders.filter(r=>!r.done).length;
+ const goal=activeGoal();
+ const amount=goal?weekEarnings(goal):0;
+ const p=goal?goalProgress(goal):0;
+ const todayGain=goal?dayAmount(goal,today):earnings.filter(e=>e.date===today).reduce((s,e)=>s+Number(e.amount||0),0);
+ return `<div class="planning-tab-content">
+  <section class="feature-card planning-feature"><div>
+   <span class="eyebrow">HOJE</span><h2>${new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</h2>
+   <p>${pendingToday?`Você tem ${pendingToday} pendência(s) para hoje.`:"Sua agenda de hoje está em dia."}</p>
+   <div class="feature-actions"><button class="btn primary" id="planningReminder">+ Novo lembrete</button>${goal?`<button class="btn" id="planningEditGoal">${uiIcon("edit")} Editar meta</button>`:`<button class="btn" id="planningGoal">+ Criar meta</button>`}</div>
+  </div><div class="focus-value">${pendingToday}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("calendar")} Agenda de hoje</h3><span>${todayReminders.length} item(ns) cadastrados</span></div><span class="soft-tag">${pendingToday} pendente(s)</span></div>
+   <div class="modern-list">${todayReminders.map(planningReminderRow).join("")||'<div class="empty">Nenhum lembrete para hoje. Aproveite para organizar seu dia.</div>'}</div>
+  </section>
+  <div class="stat-grid three">
+   <section class="stat-card"><span>Meta semanal</span><b>${goal?p.toFixed(0)+"%":"—"}</b><small>${goal?money(amount)+" de "+money(goal.target):"Nenhuma meta ativa"}</small></section>
+   <section class="stat-card"><span>Ganho de hoje</span><b>${money(todayGain)}</b><small>registrado hoje</small></section>
+   <section class="stat-card"><span>Pendências</span><b>${reminders.filter(r=>!r.done).length}</b><small>em todos os dias</small></section>
+  </div>
+ </div>`;
+}
+function planningWeekView(){
+ const days=getCurrentWeekDays();
+ const labels=["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
+ return `<div class="planning-tab-content">
+  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("calendar")} Esta semana</h3><span>Visão dos seus lembretes por dia</span></div><span class="soft-tag">${reminders.filter(r=>!r.done).length} pendente(s)</span></div>
+   <div class="planning-week-grid">${days.map((d,i)=>{const list=reminders.filter(r=>r.date===d).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99"));const done=list.filter(r=>r.done).length;return `<article class="planning-day-card ${d===todayISO()?"today":""}"><div class="planning-day-head"><div><b>${labels[i]}</b><span>${fmtDate(d)}</span></div><strong>${done}/${list.length}</strong></div><div class="planning-day-list">${list.slice(0,4).map(r=>`<button class="planning-day-item ${r.done?"done":""}" data-planning-reminder="${r.id}"><span>${uiIcon(r.done?"check":"calendar")}</span><b>${esc(r.title)}</b><small>${r.time?esc(r.time):"Sem horário"}</small></button>`).join("")||'<span class="planning-day-empty">Livre</span>'}</div>${list.length>4?`<small class="muted">+${list.length-4} item(ns)</small>`:""}</article>`}).join("")}</div>
+  </section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Resumo semanal</h3><span>Planejamento e progresso</span></div><button class="btn primary" id="planningReminder">+ Lembrete</button></div>
+   <div class="stat-grid three"><div class="stat-card"><span>Total de lembretes</span><b>${reminders.filter(r=>getCurrentWeekDays().includes(r.date)).length}</b><small>nesta semana</small></div><div class="stat-card"><span>Concluídos</span><b>${reminders.filter(r=>getCurrentWeekDays().includes(r.date)&&r.done).length}</b><small>finalizados</small></div><div class="stat-card"><span>Meta semanal</span><b>${activeGoal()?goalProgress(activeGoal()).toFixed(0)+"%":"—"}</b><small>progresso atual</small></div></div>
+  </section>
+ </div>`;
+}
+function planningGoalsView(){
+ const active=activeGoal();
+ return `<div class="planning-tab-content">
+  <div class="section-title"><div><span class="eyebrow">OBJETIVOS</span><h2>Minhas metas</h2></div><button class="btn primary" id="planningGoal">+ Nova meta</button></div>
+  <div class="stack">${goals.map(g=>{const amount=weekEarnings(g),p=goalProgress(g);return `<section class="panel-card planning-goal-card"><div class="panel-heading"><div><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span>${g.active===false?"Inativa":"Meta semanal ativa"}</span></div><span class="soft-tag">${p.toFixed(0)}%</span></div><div class="planning-goal-values"><div><b>${money(amount)}</b><span>realizado</span></div><div><b>${money(g.target)}</b><span>objetivo</span></div><div><b>${money(g.dailyTarget)}</b><span>meta diária</span></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="actions" style="margin-top:14px"><button class="btn primary" data-goal-earning="${g.id}">+ Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">Excluir</button></div></section>`}).join("")||'<div class="empty">Nenhuma meta cadastrada. Crie uma meta para começar a acompanhar seu progresso.</div>'}</div>
+  ${active?`<section class="panel-card"><div class="panel-heading"><div><h3>Progresso diário</h3><span>${esc(active.name)}</span></div><span class="soft-tag">${pLabel(goalProgress(active))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(active,d),hit=val>=active.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div></section>`:""}
+ </div>`;
+}
+function pLabel(value){return `${Number(value||0).toFixed(0)}% concluído`}
+function planningRemindersView(){
+ const pending=reminders.filter(r=>!r.done).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.time||"").localeCompare(b.time||""));
+ const done=reminders.filter(r=>r.done).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+ return `<div class="planning-tab-content"><div class="section-title"><div><span class="eyebrow">AGENDA</span><h2>Lembretes</h2></div><button class="btn primary" id="planningReminder">+ Novo lembrete</button></div>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Pendentes</h3><span>${pending.length} aguardando</span></div><span class="soft-tag">${pending.filter(r=>r.date===todayISO()).length} hoje</span></div><div class="modern-list">${pending.map(planningReminderRow).join("")||'<div class="empty">Nenhum lembrete pendente.</div>'}</div></section>
+  <section class="panel-card"><div class="panel-heading"><div><h3>Concluídos</h3><span>${done.length} finalizado(s)</span></div></div><div class="modern-list">${done.slice(0,12).map(planningReminderRow).join("")||'<div class="empty">Nenhum lembrete concluído ainda.</div>'}</div>${done.length>12?'<p class="muted">Mostrando os 12 concluídos mais recentes.</p>':''}</section>
+ </div>`;
+}
+function planningView(){
+ const tabs=[planningTabButton("today","Hoje","home"),planningTabButton("week","Semana","calendar"),planningTabButton("goals","Metas","goal"),planningTabButton("reminders","Lembretes","bell")].join("");
+ let body=planningTab==="week"?planningWeekView():planningTab==="goals"?planningGoalsView():planningTab==="reminders"?planningRemindersView():planningTodayView();
+ return `<div class="module-page"><div class="module-head"><div class="module-icon">${uiIcon("plan")}</div><div class="module-head-copy"><span class="eyebrow">ORGANIZAÇÃO</span><h1>Planejar</h1><p>Organize tarefas, metas e lembretes em um só lugar</p></div><button class="icon-btn" id="planningQuickReminder" aria-label="Novo lembrete">${uiIcon("plus")}</button></div><div class="module-tabs planning-tabs">${tabs}</div>${body}</div>`;
+}
  document.querySelector("#wellGym")?.addEventListener("click",()=>setView("gym"));
  document.querySelector("#wellDiet")?.addEventListener("click",()=>setView("food"));
  document.querySelectorAll("[data-well-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.wellView)));
