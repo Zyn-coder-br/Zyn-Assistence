@@ -134,3 +134,10 @@ Correção do player de músicas locais: arquivos importados do dispositivo agor
 ## V1.9.1
 - Mini-player exibido somente durante reprodução e fora da tela Música.
 - Janelas modais ficam acima do mini-player.
+
+## V1.9.4 — Modal Zyn + iconografia profissional
+- Base direta: V1.9.3 aprovada.
+- Padronização do modal global com camada visual Zyn, foco inicial, fechamento por ESC e clique fora.
+- Reforço visual dos modais existentes sem alterar regras de negócio.
+- Substituição dos emojis de interface por SVGs profissionais reutilizáveis.
+- Mantidos Finance 2.0, Música, IndexedDB, Supabase, navegação e PWA.
