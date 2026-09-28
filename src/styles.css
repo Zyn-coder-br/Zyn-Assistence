@@ -301,3 +301,16 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .gym-day-row .row-icon{border:0;cursor:pointer;padding:0;display:grid;place-items:center}
 .planning-done-btn{border:0;cursor:pointer;padding:0;background:transparent;color:inherit;display:grid;place-items:center}
 @media(max-width:700px){.gym-exercise-grid{grid-template-columns:1fr}.gym-tabs,.planning-tabs{overflow-x:auto}.gym-tabs button,.planning-tabs button{padding:9px 13px}.music-controls{gap:12px}.music-controls .music-side{width:46px;height:46px}.music-controls .music-play{width:60px;height:60px}}
+
+/* V1.9.9 — navegação fixa com Zyn integrado e iconografia sem fallback de casa */
+.nav-inner{max-width:760px}
+.nav button{position:relative;transition:background .18s ease,color .18s ease,transform .18s ease}
+.nav button.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;box-shadow:0 8px 22px rgba(83,58,180,.28),inset 0 0 0 1px rgba(255,255,255,.14)}
+.nav button.active .ui-icon{stroke-width:2;color:#fff}
+.nav button:active{transform:scale(.97)}
+.nav button .ui-icon{stroke-width:1.85}
+.nav .ui-icon{margin:0}
+.btn .ui-icon,.icon-btn .ui-icon{margin-right:6px}
+.icon-btn .ui-icon{width:18px;height:18px}
+.more-fab,.more-popover{display:none!important}
+@media(max-width:700px){.nav-inner{padding:6px 7px;gap:5px}.nav button{min-height:60px;font-size:9px}.nav button .ui-icon{width:20px;height:20px}}
