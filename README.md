@@ -1,6 +1,16 @@
-Zyn Assistente — V1.9.8
 
-Base: V1.9.4 aprovada. Esta versão refina a iconografia profissional, com foco em Planejar, GYM e Finanças, preservando as funcionalidades aprovadas.
+## V1.9.9 — iconografia global + Zyn na navegação
+- Cada ação conhecida usa SVG específico; fallback não usa mais ícone de casa.
+- Música: play, pausa, anterior, próxima, aleatório e importar pasta com ícones próprios.
+- Finanças: dinheiro, cartão, recibo, gráfico, meta etc. com ícones próprios.
+- Planejamento, GYM, alimentação e demais ações recebem iconografia contextual.
+- Botão flutuante do Zyn removido. O acesso ao Zyn Assistente agora fica na barra fixa inferior.
+- O painel ativo usa o mesmo gradiente roxo do antigo botão flutuante.
+- Service Worker/cache atualizado para V1.9.9.
+
+Zyn Assistente — V1.9.9
+
+Base: V1.9.8. Esta versão corrige a iconografia global e integra o acesso ao Zyn Assistente na navegação fixa, preservando as funcionalidades aprovadas.
 
 # Zyn Assistente — V1.7.0
 
