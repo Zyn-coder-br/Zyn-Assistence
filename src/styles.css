@@ -245,3 +245,8 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .modal{position:relative;z-index:1001}
 .more-fab{z-index:1100}
 .more-popover{z-index:1099}
+
+/* V1.9.3 — carteira financeira */
+.finance-wallet-total{margin-top:14px;padding:16px 17px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(145deg,var(--surface2),var(--surface));}
+.finance-wallet-total span,.finance-wallet-total small{display:block;color:var(--muted);font-size:11px}.finance-wallet-total b{display:block;font-size:29px;margin:4px 0}.finance-balance-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}.finance-balance-chip{padding:12px;border:1px solid var(--border);border-radius:15px;background:rgba(255,255,255,.018);min-width:0}.finance-balance-chip span{display:block;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.finance-balance-chip b{display:block;font-size:16px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.finance-cash-item{border-color:rgba(155,124,255,.35)}
+@media(max-width:700px){.finance-balance-grid{grid-template-columns:1fr 1fr}.finance-wallet-total b{font-size:25px}}
