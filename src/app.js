@@ -1,6 +1,6 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.0.1";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
@@ -11,7 +11,7 @@ let syncTimer = null;
 let cloudStatus = "offline";
 let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
-const DB_VERSION = 12;
+const DB_VERSION = 13;
 let db;
 let currentView = "home";
 let financeTab = "overview";
@@ -831,6 +831,7 @@ function habitForm(existing=null){const h=existing||{},el=modal(`<div class="row
 async function toggleHabit(h){const d=todayISO(),x=habitLog(h.id,d);if(x)await remove('habitLogs',x.id);else await put('habitLogs',{habitId:h.id,date:d,done:true});await loadData();render()}
 function habitsView(){const active=habits.filter(h=>h.active!==false),days=getCurrentWeekDays(),completed=active.reduce((n,h)=>n+days.filter(d=>habitLog(h.id,d)?.done).length,0),possible=active.length*days.length;return `<div class="module-page"><div class="module-head"><div class="module-icon">${uiIcon('activity')}</div><div class="module-head-copy"><span class="eyebrow">CONSISTÊNCIA</span><h1>Hábitos</h1><p>Pequenas ações repetidas para cuidar da sua rotina.</p></div><button class="btn primary" id="habitAdd">${uiIcon('plus')} Novo hábito</button></div><section class="feature-card"><div><span class="eyebrow">HOJE</span><h2>${active.length?`Você tem ${active.length} hábito(s) para acompanhar.`:'Comece criando seu primeiro hábito.'}</h2><p>${completed} conclusão(ões) nesta semana.</p></div><div class="focus-value">${possible?Math.round(completed/possible*100):0}%</div></section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('activity')} Minha rotina</h3><span>Marque cada hábito ao concluir hoje.</span></div><span class="soft-tag">${active.length} ativo(s)</span></div><div class="modern-list">${active.map(h=>{const done=!!habitLog(h.id,todayISO())?.done,wd=days.filter(d=>habitLog(h.id,d)?.done).length;return `<div class="modern-list-row habit-row"><button class="row-icon habit-check ${done?'done':''}" data-habit-toggle="${h.id}" aria-label="${done?'Desmarcar':'Concluir'}">${uiIcon(done?'check':'activity')}</button><div class="row-main"><b>${esc(h.name)}</b><span>${esc(h.category||'Bem-estar')} • ${wd}/7 nesta semana</span></div><div class="actions"><button class="btn" data-habit-edit="${h.id}">${uiIcon('edit')}</button><button class="btn danger" data-habit-delete="${h.id}">${uiIcon('trash')}</button></div></div>`}).join('')||'<div class="empty">Nenhum hábito cadastrado. Crie um para começar.</div>'}</div></section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('calendar')} Semana</h3><span>Consistência por dia</span></div></div><div class="daily-grid">${days.map((d,i)=>{const total=active.filter(h=>habitLog(h.id,d)?.done).length;return `<div class="day-box ${d===todayISO()?'today':''} ${active.length&&total===active.length?'hit':''}"><b>${['S','T','Q','Q','S','S','D'][i]}</b><br>${total}/${active.length}</div>`}).join('')}</div></section></div>`}
 }
+function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
 function currentUser(){return authSession?.user||null;}
 async function refreshAuth(){const {data,error}=await supabase.auth.getSession();if(error) throw error;authSession=data.session||null;return authSession;}
 async function signIn(email,password){const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error) throw error;authSession=data.session;if(!authSession) throw new Error("Não foi possível iniciar a sessão.");markAppUnlocked();await syncAll("login");render();toast("Nuvem: Conta conectada e dados sincronizados");}
