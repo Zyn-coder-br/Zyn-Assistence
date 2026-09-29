@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.0.5";
+const APP_VERSION = "2.0.6";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.0.5", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.0.6", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -676,7 +676,7 @@ function planningGoalsView(){
  return `<div class="planning-tab-content">
   <div class="section-title"><div><span class="eyebrow">OBJETIVOS</span><h2>Minhas metas</h2></div><button class="btn primary" id="planningGoal">+ Nova meta</button></div>
   <div class="stack">${goals.map(g=>{const amount=weekEarnings(g),p=goalProgress(g);return `<section class="panel-card planning-goal-card"><div class="panel-heading"><div><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span>${g.active===false?"Inativa":"Meta semanal ativa"}</span></div><span class="soft-tag">${p.toFixed(0)}%</span></div><div class="planning-goal-values"><div><b>${money(amount)}</b><span>realizado</span></div><div><b>${money(g.target)}</b><span>objetivo</span></div><div><b>${money(g.dailyTarget)}</b><span>meta diária</span></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="actions" style="margin-top:14px"><button class="btn primary" data-goal-earning="${g.id}">${uiIcon("money")} Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">${uiIcon("trash")} Excluir</button></div></section>`}).join("")||'<div class="empty">Nenhuma meta cadastrada. Crie uma meta para começar a acompanhar seu progresso.</div>'}</div>
-  ${active?`<section class="panel-card"><div class="panel-heading"><div><h3>Progresso diário</h3><span>${esc(active.name)}</span></div><span class="soft-tag">${pLabel(goalProgress(active))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(active,d),hit=val>=active.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div></section>`:""}
+  ${active?`<section class="panel-card"><div class="panel-heading"><div><h3>Progresso diário</h3><span>${esc(active.name)} • toque em um dia para ajustar os ganhos</span></div><span class="soft-tag">${pLabel(goalProgress(active))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(active,d),hit=val>=active.dailyTarget;return `<button type="button" class="day-box day-box-btn ${hit?"hit":""} ${d===todayISO()?"today":""}" data-goal-day="${d}" data-goal-id="${active.id}" aria-label="Ajustar ganhos de ${fmtDate(d)}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</button>`}).join("")}</div></section>${earningsHistoryView(active)}`:""}
  </div>`;
 }
 function pLabel(value){return `${Number(value||0).toFixed(0)}% concluído`}
@@ -869,11 +869,34 @@ function goalForm(existing={}){
  el.querySelector("#goalForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const target=Number(f.get("target"));const data={...(existing.id?existing:{}),name:f.get("name"),target,dailyTarget:target/7,source:f.get("source"),active:true,updatedAt:new Date().toISOString()};await put("goals",data);closeModal(el);await loadData();render();toast("Meta salva")};
 }
 
-function earningForm(goalId){
+function earningForm(goalId, existing=null){
  const goal=goals.find(g=>g.id===Number(goalId))||activeGoal();
- const el=modal(`<div class="row"><h2>Registrar ganho</h2><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="earningForm" class="stack"><div class="form-grid"><div class="field"><label>Valor (R$) *</label><input name="amount" type="number" min=".01" step=".01" required placeholder="100"></div><div class="field"><label>Data *</label><input name="date" type="date" required value="${todayISO()}"></div><div class="field"><label>Origem</label><select name="source"><option>Uber</option><option>Entregas</option></select></div><div class="field"><label>Observação</label><input name="notes" placeholder="Ex.: turno da noite"></div></div><p class="muted">Meta diária atual: ${goal?money(goal.dailyTarget):"—"}</p><button class="btn primary" type="submit">Registrar ganho</button></form>`);
+ const editing=!!existing?.id;
+ const el=modal(`<div class="row"><div><span class="eyebrow">${editing?"AJUSTAR GANHO":"NOVO GANHO"}</span><h2>${editing?"Editar ganho":"Registrar ganho"}</h2></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="earningForm" class="stack"><div class="form-grid"><div class="field"><label>Valor (R$) *</label><input name="amount" type="number" min=".01" step=".01" required placeholder="100" value="${editing?Number(existing.amount||0):""}"></div><div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(existing?.date||todayISO())}"></div><div class="field"><label>Origem</label><select name="source"><option ${existing?.source==="Uber"?"selected":""}>Uber</option><option ${existing?.source==="Entregas"?"selected":""}>Entregas</option></select></div><div class="field"><label>Observação</label><input name="notes" value="${esc(existing?.notes||"")}" placeholder="Ex.: turno da noite"></div></div><p class="muted">Meta diária atual: ${goal?money(goal.dailyTarget):"—"}. Você pode corrigir a data se registrar o ganho no dia errado.</p><div class="actions"><button class="btn primary" type="submit">${uiIcon("check")} ${editing?"Salvar alteração":"Registrar ganho"}</button>${editing?`<button class="btn danger" type="button" id="deleteEarning">${uiIcon("trash")} Excluir</button>`:""}</div></form>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
- el.querySelector("#earningForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("earnings",{amount:Number(f.get("amount")),date:f.get("date"),source:f.get("source"),notes:f.get("notes"),goalId:goal?.id||null,createdAt:new Date().toISOString()});closeModal(el);await loadData();render();toast("Ganho registrado")};
+ el.querySelector("#earningForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const data={...(existing||{}),amount:Number(f.get("amount")),date:f.get("date"),source:f.get("source"),notes:f.get("notes"),goalId:goal?.id||existing?.goalId||null,createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};await put("earnings",data);closeModal(el);await loadData();render();toast(editing?"Ganho ajustado":"Ganho registrado")};
+ el.querySelector("#deleteEarning")?.addEventListener("click",async()=>{if(await confirmZyn("Excluir este ganho? O valor será removido do progresso da meta.","Excluir ganho")){await remove("earnings",Number(existing.id));closeModal(el);await loadData();render();toast("Ganho excluído")}});
+}
+
+function earningsForGoalWeek(goal){
+ const days=getCurrentWeekDays();
+ return earnings.filter(e=>days.includes(e.date)&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||Number(b.id)-Number(a.id));
+}
+
+function earningDayManager(goalId,date){
+ const goal=goals.find(g=>g.id===Number(goalId))||activeGoal();
+ const items=earnings.filter(e=>e.date===date&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>Number(b.id)-Number(a.id));
+ const label=fmtDate(date);
+ const el=modal(`<div class="row"><div><span class="eyebrow">AJUSTE DIÁRIO</span><h2>Ganhos de ${label}</h2><p class="muted">Edite a data, o valor ou exclua um lançamento se ele foi registrado no dia errado.</p></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><div class="modern-list">${items.map(e=>`<div class="modern-list-row earning-history-row"><div class="row-icon">${uiIcon("money")}</div><div class="row-main"><b>${money(e.amount)}</b><span>${esc(e.source||"Sem origem")}${e.notes?` • ${esc(e.notes)}`:""} • ${fmtDate(e.date)}</span></div><div class="actions"><button class="btn icon-btn" data-earning-edit="${e.id}" aria-label="Editar ganho">${uiIcon("edit")}</button><button class="btn icon-btn danger" data-earning-delete="${e.id}" aria-label="Excluir ganho">${uiIcon("trash")}</button></div></div>`).join("")||'<div class="empty">Nenhum ganho registrado neste dia.</div>'}</div><div class="actions" style="margin-top:14px"><button class="btn primary" id="addDayEarning">${uiIcon("plus")} Registrar ganho neste dia</button></div>`);
+ el.querySelector("#closeModal").onclick=()=>closeModal(el);
+ el.querySelector("#addDayEarning").onclick=()=>{closeModal(el);earningForm(goal?.id,{date})};
+ el.querySelectorAll("[data-earning-edit]").forEach(b=>b.onclick=()=>{const e=earnings.find(x=>Number(x.id)===Number(b.dataset.earningEdit));if(e){closeModal(el);earningForm(goal?.id,e)}});
+ el.querySelectorAll("[data-earning-delete]").forEach(b=>b.onclick=async()=>{const e=earnings.find(x=>Number(x.id)===Number(b.dataset.earningDelete));if(e&&await confirmZyn("Excluir este ganho? O valor será removido do progresso da meta.","Excluir ganho")){await remove("earnings",Number(e.id));closeModal(el);await loadData();render();toast("Ganho excluído")}});
+}
+
+function earningsHistoryView(goal){
+ const items=earningsForGoalWeek(goal);
+ return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Corrija facilmente lançamentos registrados no dia errado.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="modern-list">${items.map(e=>`<div class="modern-list-row earning-history-row"><div class="row-icon">${uiIcon("money")}</div><div class="row-main"><b>${money(e.amount)}</b><span>${fmtDate(e.date)} • ${esc(e.source||"Sem origem")}${e.notes?` • ${esc(e.notes)}`:""}</span></div><div class="actions"><button class="btn icon-btn" data-earning-edit="${e.id}" aria-label="Editar ganho" title="Editar">${uiIcon("edit")}</button><button class="btn icon-btn danger" data-earning-delete="${e.id}" aria-label="Excluir ganho" title="Excluir">${uiIcon("trash")}</button></div></div>`).join("")||'<div class="empty">Nenhum ganho registrado nesta semana.</div>'}</div></section>`;
 }
 
 function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
@@ -1006,6 +1029,9 @@ function bind(){
  document.querySelector("#openGoals")?.addEventListener("click",()=>setView("goals"));
  document.querySelector("#homeReminders")?.addEventListener("click",()=>setView("reminders"));
  document.querySelectorAll("[data-goal-earning]").forEach(b=>b.onclick=()=>earningForm(b.dataset.goalEarning));
+ document.querySelectorAll("[data-goal-day]").forEach(b=>b.onclick=()=>earningDayManager(b.dataset.goalId,b.dataset.goalDay));
+ document.querySelectorAll("[data-earning-edit]").forEach(b=>b.onclick=()=>{const e=earnings.find(x=>Number(x.id)===Number(b.dataset.earningEdit));if(e)earningForm(e.goalId||activeGoal()?.id,e)});
+ document.querySelectorAll("[data-earning-delete]").forEach(b=>b.onclick=async()=>{const e=earnings.find(x=>Number(x.id)===Number(b.dataset.earningDelete));if(e&&await confirmZyn("Excluir este ganho? O valor será removido do progresso da meta.","Excluir ganho")){await remove("earnings",Number(e.id));await loadData();render();toast("Ganho excluído")}});
  document.querySelectorAll("[data-goal-edit]").forEach(b=>b.onclick=()=>goalForm(goals.find(g=>g.id===Number(b.dataset.goalEdit))));
  document.querySelectorAll("[data-goal-delete]").forEach(b=>b.onclick=async()=>{if(await confirmZyn("Excluir esta meta?","Excluir meta")){await remove("goals",Number(b.dataset.goalDelete));await loadData();render();toast("Meta excluída")}}); 
  document.querySelectorAll("[data-reminder-edit]").forEach(b=>b.onclick=()=>reminderForm(reminders.find(r=>r.id===Number(b.dataset.reminderEdit))));

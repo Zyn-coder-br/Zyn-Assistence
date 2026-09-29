@@ -326,3 +326,5 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .food-meal-button{background:transparent;border:0;color:var(--text);text-align:left;padding:0;cursor:pointer}
 .food-library-edit{background:transparent;border:0;color:var(--text);text-align:left;padding:0;cursor:pointer}
 @media(max-width:700px){.meal-actions .btn{min-width:40px;width:40px;padding:8px}.food-meal-mini{align-items:center}.food-meal-main{min-width:0}}
+
+.day-box-btn{width:100%;color:var(--text);background:transparent;font:inherit;cursor:pointer}.day-box-btn:hover{border-color:var(--primary);background:var(--surface2)}.earning-history-row .actions{margin-left:auto;flex-shrink:0}.earning-history-panel{margin-top:12px}@media(max-width:700px){.earning-history-row{align-items:flex-start}.earning-history-row .actions{gap:4px}.earning-history-row .actions .btn{padding:8px}.day-box-btn{min-width:0}}
