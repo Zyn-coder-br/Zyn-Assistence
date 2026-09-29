@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.0.3";
+const APP_VERSION = "2.0.5";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.0.3", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.0.5", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -17,6 +17,7 @@ let currentView = "home";
 let financeTab = "overview";
 let planningTab = "today";
 let gymTab = "week";
+let foodTab = "today";
 let moreMenuOpen = false;
 let theme = localStorage.getItem("zyn-theme") || "dark";
 let reminders = [];
@@ -531,42 +532,64 @@ const FOOD_DEFAULT=[
  ["Lanche","Fruta + aveia ou pão + ovos","Prático"],
  ["Jantar","Arroz + feijão + proteína + legumes","Econômico"]
 ];
+function foodDayName(){return FOOD_DAYS[(new Date().getDay()+6)%7]}
+function foodMealRows(day=foodDayName()){return mealPlans.filter(x=>x.day===day)}
+function foodConsumed(){try{return JSON.parse(localStorage.getItem("zyn-food-consumed")||"{}")}catch(e){return {}}}
+function saveFoodConsumed(v){localStorage.setItem("zyn-food-consumed",JSON.stringify(v))}
+function foodLibrary(){try{return JSON.parse(localStorage.getItem("zyn-food-library")||"[]")}catch(e){return []}}
+function saveFoodLibrary(items){localStorage.setItem("zyn-food-library",JSON.stringify(items))}
+async function ensureFoodTodayDefaults(){
+ const key="zyn-food-defaults-seeded-v2";
+ if(localStorage.getItem(key))return;
+ const day=foodDayName();
+ if(!mealPlans.some(x=>x.day===day)){
+   for(const x of FOOD_DEFAULT) await put("mealPlans",{day,slot:x[0],items:x[1],tag:x[2]});
+   mealPlans=await all("mealPlans");
+ }
+ localStorage.setItem(key,"1");
+}
+function foodEditForm(existing={},day=foodDayName()){
+ const el=modal(`<div class="row"><div><span class="eyebrow">DIETA</span><h2>${existing.id?"Editar":"Nova"} refeição</h2></div><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="foodMealForm" class="stack"><div class="form-grid"><div class="field"><label>Dia</label><select name="day">${FOOD_DAYS.map(d=>`<option ${d===day?'selected':''}>${d}</option>`).join("")}</select></div><div class="field"><label>Refeição</label><input name="slot" required value="${esc(existing.slot||"")}" placeholder="Ex.: Café da manhã"></div><div class="field full"><label>Alimentos</label><input name="items" required value="${esc(existing.items||"")}" placeholder="Ex.: ovos + pão + fruta"></div><div class="field"><label>Categoria</label><input name="tag" value="${esc(existing.tag||"Prático")}" placeholder="Prático"></div></div><div class="actions"><button class="btn primary">Salvar refeição</button>${existing.id?`<button type="button" class="btn danger" id="deleteMealModal">${uiIcon("trash")} Excluir</button>`:""}</div></form>`);
+ el.querySelector('#close').onclick=()=>closeModal(el);
+ el.querySelector('#foodMealForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const data={...(existing.id?existing:{}),day:f.get('day'),slot:f.get('slot'),items:f.get('items'),tag:f.get('tag')};await put('mealPlans',data);closeModal(el);await loadData();render();toast('Refeição salva')};
+ el.querySelector('#deleteMealModal')?.addEventListener('click',async()=>{if(await confirmZyn('Excluir esta refeição?','Excluir refeição')){await remove('mealPlans',Number(existing.id));closeModal(el);await loadData();render();toast('Refeição excluída')}});
+}
+function foodItemForm(existing="",index=null){
+ const el=modal(`<div class="row"><h2>${index!==null?"Editar alimento":"Novo alimento"}</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="foodItemForm" class="stack"><div class="field"><label>Nome do alimento</label><input name="item" required value="${esc(existing)}" placeholder="Ex.: banana"></div><div class="actions"><button class="btn primary">Salvar alimento</button>${index!==null?`<button type="button" class="btn danger" id="deleteFoodItem">${uiIcon("trash")} Excluir</button>`:""}</div></form>`);
+ el.querySelector('#close').onclick=()=>closeModal(el);
+ el.querySelector('#foodItemForm').onsubmit=e=>{e.preventDefault();const name=new FormData(e.target).get('item').trim();if(!name)return;const items=foodLibrary();if(index!==null)items[index]=name;else if(!items.some(x=>x.toLowerCase()===name.toLowerCase()))items.push(name);saveFoodLibrary(items);closeModal(el);render();toast('Alimento salvo')};
+ el.querySelector('#deleteFoodItem')?.addEventListener('click',async()=>{if(await confirmZyn('Excluir este alimento da biblioteca?','Excluir alimento')){const items=foodLibrary();items.splice(index,1);saveFoodLibrary(items);closeModal(el);render();toast('Alimento excluído')}});
+}
+function mealActions(m){return `<div class="actions meal-actions"><button class="btn icon-btn" data-food-edit="${m.id}" aria-label="Editar refeição" title="Editar">${uiIcon('edit')}</button><button class="btn icon-btn danger" data-food-delete-meal="${m.id}" aria-label="Excluir refeição" title="Excluir">${uiIcon('trash')}</button></div>`}
+function foodPlanningView(){
+ return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('calendar')} Planejamento semanal</h3><span>Monte cada dia e edite ou exclua qualquer refeição.</span></div><button class="btn primary" id="generateMeals">${uiIcon('plus')} Gerar base</button></div><div class="food-week-grid">${FOOD_DAYS.map(d=>{const rows=foodMealRows(d);return `<div class="food-day-card"><div class="food-day-head"><b>${d}</b><button class="icon-btn" data-food-add-day="${esc(d)}" aria-label="Adicionar refeição">${uiIcon('plus')}</button></div>${rows.map(m=>`<div class="food-meal-mini"><button class="food-meal-main" data-food-edit="${m.id}"><span>${uiIcon('food')}</span><div><b>${esc(m.slot)}</b><small>${esc(m.items)}</small></div></button>${mealActions(m)}</div>`).join('')||'<span class="muted">Sem refeições.</span>'}</div>`}).join('')}</div></section>`;
+}
+function foodLibraryView(){
+ const items=foodLibrary();
+ return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('food')} Meus alimentos</h3><span>Uma lista pessoal para montar refeições.</span></div><button class="btn primary" id="foodAddItem">${uiIcon('plus')} Alimento</button></div><div class="modern-list">${items.map((x,i)=>`<div class="modern-list-row"><div class="row-icon meal-icon">${uiIcon('food')}</div><button class="row-main food-library-edit" data-food-library-edit="${i}"><b>${esc(x)}</b><span>Disponível para seu planejamento</span></button><button class="btn danger" data-food-delete="${i}" aria-label="Excluir alimento">${uiIcon('trash')}</button></div>`).join('')||'<div class="empty">Sua biblioteca está vazia. Adicione alimentos que você costuma consumir.</div>'}</div></section>`;
+}
+function foodProgressView(){
+ const consumed=foodConsumed(),days=FOOD_DAYS,doneDays=days.filter(d=>consumed[d]),planned=mealPlans.length,plannedDays=new Set(mealPlans.map(x=>x.day)).size;
+ return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('chart')} Progresso alimentar</h3><span>Acompanhe o planejamento da semana.</span></div><span class="soft-tag">${doneDays.length}/7 dias</span></div><div class="stat-grid four"><div class="mini-stat"><b>${planned}</b><span>refeições planejadas</span></div><div class="mini-stat"><b>${plannedDays}</b><span>dias planejados</span></div><div class="mini-stat"><b>${doneDays.length}</b><span>dias concluídos</span></div><div class="mini-stat"><b>${foodLibrary().length}</b><span>alimentos</span></div></div><div class="modern-list food-progress-list">${days.map(d=>`<button class="modern-list-row ${consumed[d]?'done':''}" data-food-day-done="${esc(d)}"><div class="row-icon meal-icon">${consumed[d]?uiIcon('check'):uiIcon('calendar')}</div><div class="row-main"><b>${d}</b><span>${foodMealRows(d).length} refeição(ões) planejada(s)</span></div><span class="soft-tag">${consumed[d]?'Concluído':'Pendente'}</span></button>`).join('')}</div></section>`;
+}
+function foodTodayView(){
+ const p=foodProfile||{},day=foodDayName(),meals=foodMealRows(day),consumed=foodConsumed();
+ return `<section class="feature-card food-feature"><span class="eyebrow">MINHA ALIMENTAÇÃO</span><h2>Comer melhor sem complicar</h2><p>${day} • ${meals.length} refeições planejadas. Edite ou exclua cada opção quando quiser.</p><div class="tag-row"><span class="soft-tag">Objetivo: perder gordura</span><span class="soft-tag">Referência: ${money(p.budget||125)}/semana</span></div></section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('food')} Minhas refeições</h3><span>Use o lápis para editar ou a lixeira para excluir.</span></div><button class="btn primary" id="foodAddMeal">${uiIcon('plus')} Refeição</button></div><div class="modern-list meal-list">${meals.map((m,i)=>`<div class="modern-list-row"><button class="row-icon meal-icon" data-food-toggle="${esc(m.slot)}" aria-label="Marcar refeição">${consumed[m.slot]?uiIcon('check'):[uiIcon('coffee'),uiIcon('food'),uiIcon('food'),uiIcon('food')][i%4]}</button><button class="row-main food-meal-button" data-food-edit="${m.id}"><b>${esc(m.slot)}</b><span>${esc(m.items)}</span></button><span class="soft-tag">${esc(m.tag)}</span>${mealActions(m)}</div>`).join('')||'<div class="empty">Nenhuma refeição cadastrada para hoje. Adicione uma refeição.</div>'}</div></section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon('cart')} Lista de compras</h3><span>${shoppingItems.filter(x=>!x.done).length} itens pendentes</span></div><div class="actions"><button class="btn" id="newShopping">${uiIcon('plus')} Item</button>${shoppingItems.length?`<button class="btn danger" id="clearShopping">${uiIcon('trash')} Limpar lista</button>`:''}</div></div><div class="modern-list">${shoppingItems.map(x=>`<div class="modern-list-row"><div class="row-main"><b>${esc(x.item)}</b><span>${x.done?'Comprado':'Pendente'}</span></div><div class="actions"><button class="btn ${x.done?'primary':''}" data-shop="${x.id}">${x.done?uiIcon('check'):uiIcon('cart')} ${x.done?'Comprado':'Marcar'}</button><button class="btn danger icon-btn" data-shop-delete="${x.id}" aria-label="Excluir item" title="Excluir">${uiIcon('trash')}</button></div></div>`).join('')||'<div class="empty">Sua lista de compras está vazia.</div>'}</div></section>`;
+}
 function foodView(){
- const p=foodProfile||{};
- const dayMeals=mealPlans.filter(x=>x.day===FOOD_DAYS[(new Date().getDay()+6)%7]);
- const meals=dayMeals.length?dayMeals:FOOD_DEFAULT.map(x=>({slot:x[0],items:x[1],tag:x[2]}));
- return `<div class="module-page">
-  <div class="module-head"><div class="module-icon">${uiIcon("food")}</div><div class="module-head-copy"><h1>Dieta</h1><p>Sua alimentação de forma simples e organizada</p></div><button class="btn primary" id="foodProfile">⚙ Meu perfil</button></div>
-  <div class="module-tabs"><button class="active">Hoje</button><button>Planejamento</button><button>Alimentos</button><button>Progresso</button></div>
-  <div class="week-strip compact">${FOOD_DAYS.map((d,i)=>`<div class="week-day ${(i+1)%7===new Date().getDay()?"active":""}"><b>${d.slice(0,3)}</b><span>${25+i}</span></div>`).join("")}</div>
-  <section class="feature-card food-feature"><span class="eyebrow">MINHA ALIMENTAÇÃO</span><h2>Comer melhor sem complicar</h2><p>3–4 refeições por dia, com foco em economia, praticidade e variedade.</p><div class="tag-row"><span class="soft-tag">Objetivo: perder gordura</span><span class="soft-tag">Referência: ${money(p.budget||125)}/semana</span></div></section>
-  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("chart")} Resumo do dia</h3><span>Seu plano alimentar</span></div><span class="soft-tag">${meals.length} refeições</span></div><div class="stat-grid four"><div class="mini-stat"><b>1.450</b><span>kcal estimadas</span></div><div class="mini-stat"><b>65%</b><span>meta diária</span></div><div class="mini-stat"><b>1,5 L</b><span>água</span></div><div class="mini-stat"><b>${meals.length}</b><span>refeições</span></div></div></section>
-  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("food")} Minhas refeições</h3><span>Hoje</span></div><button class="btn primary" id="generateMeals">+ Planejar semana</button></div><div class="modern-list meal-list">${meals.map((m,i)=>`<div class="modern-list-row"><div class="row-icon meal-icon">${[uiIcon("coffee"),uiIcon("food"),uiIcon("food"),uiIcon("food")][i%4]}</div><div class="row-main"><b>${esc(m.slot)}</b><span>${esc(m.items)}</span></div><span class="soft-tag">${esc(m.tag)}</span></div>`).join("")}</div></section>
-  <section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("cart")} Lista de compras</h3><span>${shoppingItems.filter(x=>!x.done).length} itens pendentes</span></div><button class="btn" id="newShopping">+ Item</button></div><div class="modern-list">${shoppingItems.map(x=>`<div class="modern-list-row"><div class="row-main"><b>${esc(x.item)}</b><span>${x.done?"Comprado":"Pendente"}</span></div><button class="btn ${x.done?"primary":""}" data-shop="${x.id}">${x.done?"✓":"Marcar"}</button></div>`).join("")||'<div class="empty">Gere a semana para criar sua lista de compras.</div>'}</div></section>
- </div>`;
+ const tabs=[['today','Hoje','calendar'],['planning','Planejamento','plan'],['foods','Alimentos','food'],['progress','Progresso','chart']];
+ return `<div class="module-page"><div class="module-head"><div class="module-icon">${uiIcon('food')}</div><div class="module-head-copy"><span class="eyebrow">ALIMENTAÇÃO</span><h1>Dieta</h1><p>Sua alimentação de forma simples e organizada</p></div><button class="btn primary" id="foodProfile">${uiIcon('settings')} Meu perfil</button></div><div class="module-tabs food-tabs">${tabs.map(([id,label,icon])=>`<button class="${foodTab===id?'active':''}" data-food-tab="${id}">${uiIcon(icon)}${label}</button>`).join('')}</div>${foodTab==='today'?foodTodayView():foodTab==='planning'?foodPlanningView():foodTab==='foods'?foodLibraryView():foodProgressView()}</div>`;
 }
 function foodProfileForm(){
- const p=foodProfile||{},el=modal(`<div class="row"><h2>Meu perfil alimentar</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="foodForm" class="stack"><div class="form-grid">
- <div class="field"><label>Refeições por dia</label><select name="meals"><option>3</option><option selected>3–4</option><option>4</option></select></div>
- <div class="field"><label>Orçamento semanal de referência</label><input name="budget" type="number" min="0" step="10" value="${p.budget||125}"></div>
- <div class="field"><label>Estilo</label><select name="cooking"><option selected>Sim + prático</option><option>Principalmente cozinhar</option><option>Principalmente prático</option></select></div>
- <div class="field"><label>Alimentos que gosto</label><input name="likes" value="${esc(p.likes||"")}" placeholder="Ex.: frango, ovos, arroz"></div>
- <div class="field full"><label>Alimentos que não quero</label><input name="avoid" value="${esc(p.avoid||"Coco e derivados")}"></div>
- <div class="field full"><label>Rotina</label><textarea name="routine" rows="3">${esc(p.routine||"Trabalho 7h30–16h20 e trabalho noturno em parte da semana a partir das 19h.")}</textarea></div>
- </div><p class="muted">O orçamento é uma referência e pode variar conforme compras da casa e preços locais.</p><button class="btn primary">Salvar perfil</button></form>`);
- el.querySelector("#close").onclick=()=>closeModal(el);
- el.querySelector("#foodForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);foodProfile={id:1,meals:f.get("meals"),budget:Number(f.get("budget")),cooking:f.get("cooking"),likes:f.get("likes"),avoid:f.get("avoid"),routine:f.get("routine")};await put("foodProfile",foodProfile);await loadData();closeModal(el);render();toast("Perfil alimentar salvo")};
+ const p=foodProfile||{},el=modal(`<div class="row"><h2>Meu perfil alimentar</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon('close')}</button></div><form id="foodForm" class="stack"><div class="form-grid"><div class="field"><label>Refeições por dia</label><select name="meals"><option>3</option><option ${p.meals==='3–4'?'selected':''}>3–4</option><option>4</option></select></div><div class="field"><label>Orçamento semanal de referência</label><input name="budget" type="number" min="0" step="10" value="${p.budget||125}"></div><div class="field"><label>Estilo</label><select name="cooking"><option ${p.cooking==='Sim + prático'||!p.cooking?'selected':''}>Sim + prático</option><option>Principalmente cozinhar</option><option>Principalmente prático</option></select></div><div class="field"><label>Alimentos que gosto</label><input name="likes" value="${esc(p.likes||'')}" placeholder="Ex.: frango, ovos, arroz"></div><div class="field full"><label>Alimentos que não quero</label><input name="avoid" value="${esc(p.avoid||'Coco e derivados')}"></div><div class="field full"><label>Rotina</label><textarea name="routine" rows="3">${esc(p.routine||'')}</textarea></div></div><button class="btn primary">Salvar perfil</button></form>`);
+ el.querySelector('#close').onclick=()=>closeModal(el);el.querySelector('#foodForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);foodProfile={id:1,meals:f.get('meals'),budget:Number(f.get('budget')),cooking:f.get('cooking'),likes:f.get('likes'),avoid:f.get('avoid'),routine:f.get('routine')};await put('foodProfile',foodProfile);closeModal(el);await loadData();render();toast('Perfil alimentar salvo')};
 }
 async function generateMeals(){
- for(const day of FOOD_DAYS) for(const x of FOOD_DEFAULT) await put("mealPlans",{day,slot:x[0],items:x[1],tag:x[2]});
- for(const item of ["Arroz","Feijão","Ovos","Frango","Banana","Aveia","Verduras/legumes","Frutas","Pão","Iogurte natural"]) if(!shoppingItems.some(x=>x.item===item)) await put("shoppingItems",{item,done:false});
- await loadData();render();toast("Planejamento semanal criado");
+ for(const day of FOOD_DAYS) for(const x of FOOD_DEFAULT){const exists=mealPlans.find(m=>m.day===day&&m.slot===x[0]);if(!exists)await put('mealPlans',{day,slot:x[0],items:x[1],tag:x[2]})}
+ for(const item of ['Arroz','Feijão','Ovos','Frango','Banana','Aveia','Verduras/legumes','Frutas','Pão','Iogurte natural']) if(!shoppingItems.some(x=>x.item===item))await put('shoppingItems',{item,done:false});
+ await loadData();render();toast('Planejamento semanal criado');
 }
-function shoppingForm(){
- const el=modal(`<div class="row"><h2>Adicionar item</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="shopForm" class="stack"><div class="field"><label>Item</label><input name="item" required placeholder="Ex.: tomate"></div><button class="btn primary">Adicionar</button></form>`);
- el.querySelector("#close").onclick=()=>closeModal(el);
- el.querySelector("#shopForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("shoppingItems",{item:f.get("item"),done:false});closeModal(el);await loadData();render();toast("Item adicionado")};
-}
+function shoppingForm(){const el=modal(`<div class="row"><h2>Adicionar item</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon('close')}</button></div><form id="shopForm" class="stack"><div class="field"><label>Item</label><input name="item" required placeholder="Ex.: tomate"></div><button class="btn primary">Adicionar</button></form>`);el.querySelector('#close').onclick=()=>closeModal(el);el.querySelector('#shopForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put('shoppingItems',{item:f.get('item').trim(),done:false});closeModal(el);await loadData();render();toast('Item adicionado')};}
 function syncMusicDock(){
  const dock=document.querySelector("#musicDock");
  if(!dock)return;
@@ -906,7 +929,8 @@ async function syncAll(reason="auto"){
 function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll("auto"),1200);}
 function bindCloudEvents(){supabase.auth.onAuthStateChange((event,session)=>{authSession=session||null;if(session){scheduleSync();}else{setCloudStatus("offline","Entre na conta para sincronizar");}render();});window.addEventListener("online",()=>syncAll("online"));window.addEventListener("offline",()=>setCloudStatus("offline","Sem internet — alterações ficam no aparelho"));}
 
-async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");investmentAssets=await all("investmentAssets");musicTracks=await all("musicTracks");
+async function loadData(){reminders=await all("reminders");goals=await all("goals");earnings=await all("earnings");gymProfile=(await all("gymProfile"))[0]||null;gymPlans=await all("gymPlans");gymSessions=await all("gymSessions");foodProfile=(await all("foodProfile"))[0]||null;mealPlans=await all("mealPlans");shoppingItems=await all("shoppingItems");
+ await ensureFoodTodayDefaults();financeProfile=(await all("financeProfile"))[0]||null;financeAccounts=await all("financeAccounts");financeTransactions=await all("financeTransactions");financeBills=await all("financeBills");financeGoals=await all("financeGoals");investmentAssets=await all("investmentAssets");musicTracks=await all("musicTracks");
  // YouTube e prévias são removidos da biblioteca: o Zyn trabalha apenas com áudio completo.
  const unsupported=musicTracks.filter(t=>t.source==="youtube"||t.source==="itunes-preview");
  for(const t of unsupported){try{await remove("musicTracks",t.id)}catch(e){}}
@@ -1022,9 +1046,22 @@ function bind(){
  document.querySelector("#financeBill")?.addEventListener("click",financeBillForm);
  document.querySelector("#financeMonth")?.addEventListener("click",()=>financeMonthPicker(financeProfile?.selectedMonth||monthKey()));
  document.querySelector("#foodProfile")?.addEventListener("click",foodProfileForm);
+ document.querySelector("#foodProfile")?.addEventListener("click",foodProfileForm);
+ document.querySelectorAll("[data-food-tab]").forEach(b=>b.addEventListener("click",()=>{foodTab=b.dataset.foodTab||"today";render();}));
+ document.querySelector("#foodAddMeal")?.addEventListener("click",()=>foodEditForm({},foodDayName()));
+ document.querySelectorAll("[data-food-edit]").forEach(b=>b.onclick=()=>{const id=Number(b.dataset.foodEdit);const existing=mealPlans.find(x=>Number(x.id)===id);if(existing)foodEditForm(existing,existing.day)});
+ document.querySelectorAll("[data-food-add-day]").forEach(b=>b.onclick=()=>foodEditForm({},b.dataset.foodAddDay));
+ document.querySelectorAll("[data-food-delete-meal]").forEach(b=>b.onclick=async e=>{e.stopPropagation();if(await confirmZyn("Excluir esta refeição?","Excluir refeição")){await remove("mealPlans",Number(b.dataset.foodDeleteMeal));await loadData();render();toast("Refeição excluída")}});
+ document.querySelector("#foodAddItem")?.addEventListener("click",()=>foodItemForm());
+ document.querySelectorAll("[data-food-library-edit]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.foodLibraryEdit);const items=foodLibrary();foodItemForm(items[i],i)});
+ document.querySelectorAll("[data-food-delete]").forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.foodDelete);if(await confirmZyn("Excluir este alimento da biblioteca?","Excluir alimento")){const items=foodLibrary();items.splice(i,1);saveFoodLibrary(items);render();toast("Alimento excluído")}});
+ document.querySelectorAll("[data-food-toggle]").forEach(b=>b.onclick=()=>{const key=b.dataset.foodToggle,c=foodConsumed();c[key]=!c[key];saveFoodConsumed(c);render();});
+ document.querySelectorAll("[data-food-day-done]").forEach(b=>b.onclick=()=>{const key=b.dataset.foodDayDone,c=foodConsumed();c[key]=!c[key];saveFoodConsumed(c);render();});
  document.querySelector("#generateMeals")?.addEventListener("click",generateMeals);
  document.querySelector("#newShopping")?.addEventListener("click",shoppingForm);
- document.querySelectorAll("[data-shop]").forEach(b=>b.onclick=async()=>{const x=shoppingItems.find(x=>x.id===Number(b.dataset.shop));if(x){x.done=!x.done;await put("shoppingItems",x);await loadData();render()}});
+ document.querySelectorAll("[data-shop]").forEach(b=>b.onclick=async e=>{e.stopPropagation();const x=shoppingItems.find(x=>x.id===Number(b.dataset.shop));if(x){x.done=!x.done;await put("shoppingItems",x);await loadData();render()}});
+ document.querySelectorAll("[data-shop-delete]").forEach(b=>b.onclick=async e=>{e.stopPropagation();if(await confirmZyn("Excluir este item da lista de compras?","Excluir item")){await remove("shoppingItems",Number(b.dataset.shopDelete));await loadData();render();toast("Item excluído")}});
+ document.querySelector("#clearShopping")?.addEventListener("click",async()=>{if(!shoppingItems.length)return;if(await confirmZyn("Excluir todos os itens da lista de compras?","Limpar lista")){for(const x of [...shoppingItems])await remove("shoppingItems",Number(x.id));await loadData();render();toast("Lista de compras limpa")}});
  document.querySelectorAll("[data-reminder-done]").forEach(b=>b.onclick=async()=>{const r=reminders.find(r=>r.id===Number(b.dataset.reminderDone));if(r){r.done=!r.done;await put("reminders",r);await loadData();render()}});
  document.querySelector("#homeMusic")?.addEventListener("click",()=>setView("music"));
  document.querySelectorAll("[data-home-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.homeView)));

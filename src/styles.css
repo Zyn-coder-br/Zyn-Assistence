@@ -314,3 +314,15 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .icon-btn .ui-icon{width:18px;height:18px}
 .more-fab,.more-popover{display:none!important}
 @media(max-width:700px){.nav-inner{padding:6px 7px;gap:5px}.nav button{min-height:60px;font-size:9px}.nav button .ui-icon{width:20px;height:20px}}
+
+/* Dieta 1.1 — ações reais de edição/exclusão */
+.food-meal-mini{display:flex;align-items:center;gap:8px;padding:7px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.015)}
+.food-meal-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;text-align:left;background:transparent;color:var(--text);padding:5px}
+.food-meal-main>span{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border-radius:11px;background:rgba(155,124,255,.13);color:var(--primary)}
+.food-meal-main>div{min-width:0;display:flex;flex-direction:column}
+.food-meal-main b,.food-meal-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.food-meal-main small{color:var(--muted);font-size:11px;margin-top:2px}
+.meal-actions{flex-wrap:nowrap;margin-left:auto}
+.food-meal-button{background:transparent;border:0;color:var(--text);text-align:left;padding:0;cursor:pointer}
+.food-library-edit{background:transparent;border:0;color:var(--text);text-align:left;padding:0;cursor:pointer}
+@media(max-width:700px){.meal-actions .btn{min-width:40px;width:40px;padding:8px}.food-meal-mini{align-items:center}.food-meal-main{min-width:0}}
