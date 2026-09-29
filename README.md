@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.0.6
+# Zyn Assistente — V2.0.7
 
 Base: V2.0.3 (última versão aprovada pelo usuário).
 
@@ -19,7 +19,7 @@ Base: V2.0.3 (última versão aprovada pelo usuário).
 - index.html e assets permanecem na raiz do ZIP.
 
 
-## Ajuste de ganhos 2.0.6
+## Ajuste de ganhos 2.0.7
 - Histórico semanal de ganhos dentro de Planejar > Metas.
 - Editar ganho existente, inclusive corrigindo a data.
 - Excluir ganho existente.
