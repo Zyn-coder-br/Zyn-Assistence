@@ -328,3 +328,35 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 @media(max-width:700px){.meal-actions .btn{min-width:40px;width:40px;padding:8px}.food-meal-mini{align-items:center}.food-meal-main{min-width:0}}
 
 .day-box-btn{width:100%;color:var(--text);background:transparent;font:inherit;cursor:pointer}.day-box-btn:hover{border-color:var(--primary);background:var(--surface2)}.earning-history-row .actions{margin-left:auto;flex-shrink:0}.earning-history-panel{margin-top:12px}@media(max-width:700px){.earning-history-row{align-items:flex-start}.earning-history-row .actions{gap:4px}.earning-history-row .actions .btn{padding:8px}.day-box-btn{min-width:0}}
+
+/* V2.0.7 — refinamento de espaçamento e responsividade */
+.planning-goal-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:16px 0 12px}
+.planning-goal-values>div{min-width:0;display:flex;flex-direction:column;gap:5px}
+.planning-goal-values b{font-size:24px;line-height:1.15;white-space:nowrap}
+.planning-goal-values span{font-size:11px;color:var(--muted);line-height:1.3}
+.planning-goal-card .actions{gap:10px}
+.earning-history-panel{margin-top:18px}
+.earning-history-row{min-width:0;gap:12px;padding:12px 13px}
+.earning-history-row .row-main{min-width:0;overflow:hidden}
+.earning-history-row .row-main b{line-height:1.25}
+.earning-history-row .row-main span{line-height:1.35;white-space:normal;overflow-wrap:anywhere}
+.earning-history-row .actions{gap:7px;flex:0 0 auto}
+.earning-history-row .actions .btn{width:42px;min-width:42px;height:42px;padding:8px}
+.zyn-modal .modal{min-width:0;overflow-x:hidden}
+.zyn-modal .modern-list-row{min-width:0}
+.zyn-modal .modern-list-row .actions{flex:0 0 auto}
+.zyn-modal .modern-list-row .row-main{min-width:0}
+@media(max-width:700px){
+  .planning-goal-values{grid-template-columns:1fr;gap:11px;margin:14px 0}
+  .planning-goal-values>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--border)}
+  .planning-goal-values>div:last-child{border-bottom:0;padding-bottom:0}
+  .planning-goal-values b{font-size:21px}
+  .planning-goal-values span{font-size:11px;text-align:right}
+  .planning-goal-card .actions{gap:8px}
+  .planning-goal-card .actions .btn{min-height:44px}
+  .earning-history-row{padding:10px;gap:9px}
+  .earning-history-row .row-icon{width:36px;height:36px;flex-basis:36px}
+  .earning-history-row .actions .btn{width:40px;min-width:40px;height:40px}
+  .zyn-modal{padding:10px}
+  .zyn-modal .modal{width:100%;max-width:100%;box-sizing:border-box}
+}
