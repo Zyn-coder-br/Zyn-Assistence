@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.0.5
+# Zyn Assistente — V2.0.6
 
 Base: V2.0.3 (última versão aprovada pelo usuário).
 
@@ -17,3 +17,12 @@ Base: V2.0.3 (última versão aprovada pelo usuário).
 - app.js: node --check OK
 - sw.js: node --check OK
 - index.html e assets permanecem na raiz do ZIP.
+
+
+## Ajuste de ganhos 2.0.6
+- Histórico semanal de ganhos dentro de Planejar > Metas.
+- Editar ganho existente, inclusive corrigindo a data.
+- Excluir ganho existente.
+- Toque em qualquer dia do progresso diário para abrir os ganhos daquele dia.
+- Registro pode ser criado já com a data do dia selecionado.
+- Não altera DB_VERSION (permanece 12).
