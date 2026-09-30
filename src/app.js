@@ -970,13 +970,13 @@ function earningForm(goalId, existing=null){
 
 function earningsForGoalWeek(goal){
  const days=new Set(goalPeriodDays(goal));
- return earnings.filter(e=>days.has(normalizeDateKey(e.date))&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>(normalizeDateKey(b.date)||"").localeCompare(normalizeDateKey(a.date)||"")||Number(b.id)-Number(a.id));
+ return earnings.filter(e=>days.has(normalizeDateKey(e.date))).sort((a,b)=>(normalizeDateKey(b.date)||"").localeCompare(normalizeDateKey(a.date)||"")||Number(b.id)-Number(a.id));
 }
 
 function earningDayManager(goalId,date){
  const goal=goals.find(g=>g.id===Number(goalId))||activeGoal();
  const targetDate=normalizeDateKey(date);
- const items=earnings.filter(e=>normalizeDateKey(e.date)===targetDate&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>Number(b.id)-Number(a.id));
+ const items=earnings.filter(e=>normalizeDateKey(e.date)===targetDate).sort((a,b)=>Number(b.id)-Number(a.id));
  const label=fmtDate(date);
  const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">AJUSTE DIÁRIO</span><h2>Ganhos de ${label}</h2><p>Edite a data, o valor ou exclua um lançamento registrado no dia errado.</p></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><div class="earning-list earning-list-modal">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado neste dia.</div>'}</div><div class="actions" style="margin-top:14px"><button class="btn primary" id="addDayEarning">${uiIcon("plus")} Registrar ganho neste dia</button></div>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
@@ -991,7 +991,7 @@ function earningListRow(e){
 
 function earningsHistoryView(goal){
  const items=earningsForGoalWeek(goal);
- return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Edite ou exclua qualquer lançamento dentro do período desta meta.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="earning-list">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado nesta semana.</div>'}</div></section>`;
+ return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Edite ou exclua qualquer lançamento dentro do período desta meta.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="earning-list">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado no período desta meta.</div>'}</div></section>`;
 }
 
 function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
