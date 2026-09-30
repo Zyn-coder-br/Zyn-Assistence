@@ -1,3 +1,10 @@
+# Zyn Assistente V2.1.0
+
+V2.1.0 inicia a integração da IA Zyn com backend seguro, chat por texto, entrada por voz e ações locais (lembrete, ganho e meta). Também transforma metas em períodos configuráveis: valor total ÷ quantidade de dias.
+
+## IA
+A chave da OpenAI não deve ser colocada no PWA. Use a pasta `server/` para executar o backend e configure a URL dele no painel Zyn.
+
 # Zyn Assistente — V2.0.9
 
 Base: V2.0.8.
