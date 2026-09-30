@@ -1,0 +1,37 @@
+{
+  "id": "./?app=zyn",
+  "name": "Zyn Assistente",
+  "short_name": "Zyn",
+  "start_url": "./?app=zyn",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#17121f",
+  "theme_color": "#7a4dcc",
+  "description": "Assistente pessoal para organizar sua vida, metas, finanças, GYM, alimentação e música.",
+  "categories": [
+    "productivity",
+    "lifestyle",
+    "finance"
+  ],
+  "icons": [
+    {
+      "src": "./icons/zyn-icon-192-v2.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/zyn-icon-512-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/zyn-icon-maskable-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
