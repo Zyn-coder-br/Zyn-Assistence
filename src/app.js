@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.0.9";
+const APP_VERSION = "2.1.0";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.0.9", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.1.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -368,9 +368,10 @@ function bindAuthGate(){
 let activeModalCount=0;
 function closeModal(el){if(!el)return;el.remove();activeModalCount=Math.max(0,activeModalCount-1);document.body.classList.toggle("zyn-modal-open",activeModalCount>0)}
 
-function dateKey(date){return date.toISOString().slice(0,10)}
-
-function dayAmount(goal,date=todayISO()){return earnings.filter(e=>e.date===date&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
+function localDateKey(date=new Date()){const y=date.getFullYear();const m=String(date.getMonth()+1).padStart(2,"0");const d=String(date.getDate()).padStart(2,"0");return `${y}-${m}-${d}`}
+function dateKey(date){return localDateKey(date)}
+function normalizeDateKey(value){if(!value)return "";const str=String(value);if(/^\d{4}-\d{2}-\d{2}/.test(str))return str.slice(0,10);const d=new Date(str);return Number.isNaN(d.getTime())?str:localDateKey(d)}
+function dayAmount(goal,date=todayISO()){const day=normalizeDateKey(date);return earnings.filter(e=>normalizeDateKey(e.date)===day&&(!goal?.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
 
 function esc(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
@@ -380,11 +381,19 @@ function fmtDate(value){if(!value)return "Sem data";return new Date(value+"T12:0
 
 function getCurrentWeekDays(){const start=weekStart();return Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return dateKey(d)})}
 
-function goalProgress(goal){const amount=weekEarnings(goal);return Math.min(100,goal.target?amount/goal.target*100:0)}
+function goalStartDate(goal){
+ const fallback=(goal?.createdAt||"").slice(0,10)||todayISO();
+ return normalizeDateKey(goal?.startDate||fallback);
+}
+function goalDays(goal){return Math.max(1,Math.min(3650,Number(goal?.days)||7))}
+function goalEndDate(goal){const start=goalStartDate(goal);const d=new Date(`${start}T12:00:00`);d.setDate(d.getDate()+goalDays(goal)-1);return localDateKey(d)}
+function goalPeriodDays(goal){const start=goalStartDate(goal);return Array.from({length:goalDays(goal)},(_,i)=>{const d=new Date(`${start}T12:00:00`);d.setDate(d.getDate()+i);return localDateKey(d)})}
+function goalEarnings(goal){const days=new Set(goalPeriodDays(goal));return earnings.filter(e=>days.has(normalizeDateKey(e.date))&&(!goal?.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
+function goalProgress(goal){const amount=goalEarnings(goal);return Math.min(100,goal.target?amount/goal.target*100:0)}
 
 function goalsView(){
  return `<div class="section-title"><h2>Metas</h2><button class="btn primary" id="newGoal">${uiIcon("goal")} Nova meta</button></div>
- <div class="stack">${goals.map(g=>{const amount=weekEarnings(g);const p=goalProgress(g);return `<section class="card full"><div class="row"><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span class="tag">${g.active===false?"Inativa":"Ativa"}</span></div><div class="row"><div><div class="metric">${money(amount)}</div><div class="muted">de ${money(g.target)} na semana</div></div><div style="text-align:right"><div class="metric">${p.toFixed(1)}%</div><div class="muted">concluído</div></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Diária: ${money(g.dailyTarget)}</span><span class="muted">Hoje: ${money(dayAmount(g))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(g,d);const hit=val>=g.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div><div class="actions" style="margin-top:15px"><button class="btn primary" data-goal-earning="${g.id}">${uiIcon("money")} Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">${uiIcon("trash")} Excluir</button></div></section>`}).join("")||`<div class="empty">Nenhuma meta cadastrada. Crie sua primeira meta semanal.</div>`}</div>`;
+ <div class="stack">${goals.map(g=>{const amount=goalEarnings(g);const p=goalProgress(g);return `<section class="card full"><div class="row"><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span class="tag">${g.active===false?"Inativa":"Ativa"}</span></div><div class="row"><div><div class="metric">${money(amount)}</div><div class="muted">de ${money(g.target)} no período</div></div><div style="text-align:right"><div class="metric">${p.toFixed(1)}%</div><div class="muted">concluído</div></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="row"><span class="muted">Diária: ${money(g.dailyTarget)}</span><span class="muted">Hoje: ${money(dayAmount(g))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(g,d);const hit=val>=g.dailyTarget;return `<div class="day-box ${hit?"hit":""} ${d===todayISO()?"today":""}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</div>`}).join("")}</div><div class="actions" style="margin-top:15px"><button class="btn primary" data-goal-earning="${g.id}">${uiIcon("money")} Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">${uiIcon("trash")} Excluir</button></div></section>`}).join("")||`<div class="empty">Nenhuma meta cadastrada. Crie sua primeira meta.</div>`}</div>`;
 }
 
 function modal(content,options={}){
@@ -446,7 +455,7 @@ function store(name,mode="readonly"){return db.transaction(name,mode).objectStor
 
 function toast(message){const el=document.createElement("div");el.textContent=message;Object.assign(el.style,{position:"fixed",bottom:"82px",left:"50%",transform:"translateX(-50%)",background:"var(--text)",color:"var(--surface)",padding:"12px 17px",borderRadius:"12px",zIndex:40,boxShadow:"0 8px 30px #0003"});document.body.appendChild(el);setTimeout(()=>el.remove(),2500)}
 
-function todayISO(){return new Date().toISOString().slice(0,10)}
+function todayISO(){return localDateKey(new Date())}
 
 function toggleTheme(){theme=theme==="light"?"dark":"light";localStorage.setItem("zyn-theme",theme);document.body.className=theme;render()}
 
@@ -497,7 +506,7 @@ function uiIcon(name){const paths={
  dots:'<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>'
 };return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.dots}</svg>`}
 
-function weekEarnings(goal){const days=getCurrentWeekDays();return earnings.filter(e=>days.includes(e.date)&&(!goal.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
+function weekEarnings(goal){const days=new Set(getCurrentWeekDays());return earnings.filter(e=>days.has(normalizeDateKey(e.date))&&(!goal?.source||goal.source==="all"||goal.source===e.source)).reduce((sum,e)=>sum+Number(e.amount||0),0)}
 
 function weekStart(date=new Date()){const d=new Date(date);const day=d.getDay();const diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);d.setHours(0,0,0,0);return d}
 
@@ -746,7 +755,7 @@ function planningGoalsView(){
  const active=activeGoal();
  return `<div class="planning-tab-content">
   <div class="section-title"><div><span class="eyebrow">OBJETIVOS</span><h2>Minhas metas</h2></div><button class="btn primary" id="planningGoal">+ Nova meta</button></div>
-  <div class="stack">${goals.map(g=>{const amount=weekEarnings(g),p=goalProgress(g);return `<section class="panel-card planning-goal-card"><div class="panel-heading"><div><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span>${g.active===false?"Inativa":"Meta semanal ativa"}</span></div><span class="soft-tag">${p.toFixed(0)}%</span></div><div class="planning-goal-values"><div><b>${money(amount)}</b><span>realizado</span></div><div><b>${money(g.target)}</b><span>objetivo</span></div><div><b>${money(g.dailyTarget)}</b><span>meta diária</span></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="actions" style="margin-top:14px"><button class="btn primary" data-goal-earning="${g.id}">${uiIcon("money")} Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">${uiIcon("trash")} Excluir</button></div></section>`}).join("")||'<div class="empty">Nenhuma meta cadastrada. Crie uma meta para começar a acompanhar seu progresso.</div>'}</div>
+  <div class="stack">${goals.map(g=>{const amount=goalEarnings(g),p=goalProgress(g);return `<section class="panel-card planning-goal-card"><div class="panel-heading"><div><h3>${uiIcon("goal")} ${esc(g.name)}</h3><span>${g.active===false?"Inativa":`Meta de ${goalDays(g)} dias • até ${fmtDate(goalEndDate(g))}`}</span></div><span class="soft-tag">${p.toFixed(0)}%</span></div><div class="planning-goal-values"><div><b>${money(amount)}</b><span>realizado</span></div><div><b>${money(g.target)}</b><span>objetivo</span></div><div><b>${money(g.dailyTarget)}</b><span>meta diária</span></div></div><div class="progress"><div style="width:${p}%"></div></div><div class="actions" style="margin-top:14px"><button class="btn primary" data-goal-earning="${g.id}">${uiIcon("money")} Registrar ganho</button><button class="btn" data-goal-edit="${g.id}">${uiIcon("edit")} Editar</button><button class="btn danger" data-goal-delete="${g.id}">${uiIcon("trash")} Excluir</button></div></section>`}).join("")||'<div class="empty">Nenhuma meta cadastrada. Crie uma meta para começar a acompanhar seu progresso.</div>'}</div>
   ${active?`<section class="panel-card"><div class="panel-heading"><div><h3>Progresso diário</h3><span>${esc(active.name)} • toque em um dia para ajustar os ganhos</span></div><span class="soft-tag">${pLabel(goalProgress(active))}</span></div><div class="daily-grid">${getCurrentWeekDays().map((d,i)=>{const val=dayAmount(active,d),hit=val>=active.dailyTarget;return `<button type="button" class="day-box day-box-btn ${hit?"hit":""} ${d===todayISO()?"today":""}" data-goal-day="${d}" data-goal-id="${active.id}" aria-label="Ajustar ganhos de ${fmtDate(d)}"><b>${["S","T","Q","Q","S","S","D"][i]}</b><br>${money(val).replace("R$","").trim()}${hit?" ✓":""}</button>`}).join("")}</div></section>${earningsHistoryView(active)}`:""}
  </div>`;
 }
@@ -933,21 +942,21 @@ function reminderForm(existing={}){
 }
 
 function goalForm(existing={}){
- const editing=!!existing.id;
- const initialName=editing?String(existing.name||""):"";
- const initialTarget=editing&&Number(existing.target)>0?Number(existing.target):"";
- const initialDays=editing&&Number(existing.days)>0?Number(existing.days):7;
- const initialSource=editing&&existing.source?existing.source:"all";
- const initialDaily=editing&&Number(existing.dailyTarget)>0?Number(existing.dailyTarget):(initialTarget?Number(initialTarget)/initialDays:"");
- const el=modal(`<div class="row"><div><span class="eyebrow">${editing?"EDITAR META":"NOVA META"}</span><h2>${editing?"Editar meta":"Criar meta"}</h2></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="goalForm" class="stack"><div class="form-grid"><div class="field full"><label>Nome da meta *</label><input name="name" required value="${esc(initialName)}" placeholder="Ex.: Meta Uber e Entregas"></div><div class="field"><label>Valor semanal (R$) *</label><input name="target" type="number" min="0.01" step=".01" required value="${initialTarget}" placeholder="Ex.: 700"></div><div class="field"><label>Divisão diária</label><input name="days" type="number" min="1" max="7" step="1" value="${initialDays}" inputmode="numeric"></div><div class="field"><label>Fonte de renda</label><select name="source"><option value="all" ${initialSource==="all"?"selected":""}>Todas as fontes</option><option value="Uber" ${initialSource==="Uber"?"selected":""}>Uber</option><option value="Entregas" ${initialSource==="Entregas"?"selected":""}>Entregas</option><option value="Outros" ${initialSource==="Outros"?"selected":""}>Outros</option></select></div><div class="field"><label>Meta diária calculada</label><input name="dailyTarget" readonly value="${initialDaily!==""?Number(initialDaily).toFixed(2):""}" placeholder="Calculada automaticamente"></div></div><p class="muted">Defina o nome, valor semanal, quantidade de dias e fonte de renda. A meta diária será calculada automaticamente com base nesses valores.</p><button class="btn primary" type="submit">${uiIcon("check")} ${editing?"Salvar alterações":"Salvar meta"}</button></form>`);
+ const editing=!!existing?.id;
+ const initialName=existing?.name||"";
+ const initialTarget=existing?.target??"";
+ const initialDays=existing?.days??7;
+ const initialStart=existing?.startDate||todayISO();
+ const initialSource=existing?.source||"all";
+ const initialDaily=existing?.dailyTarget??(initialTarget?Number(initialTarget)/Math.max(1,Number(initialDays)):"");
+ const initialEnd=(()=>{const d=new Date(`${initialStart}T12:00:00`);d.setDate(d.getDate()+Math.max(1,Math.min(3650,Number(initialDays)||7))-1);return localDateKey(d)})();
+ const el=modal(`<div class="row"><div><span class="eyebrow">${editing?"EDITAR META":"NOVA META"}</span><h2>${editing?"Editar meta":"Criar meta"}</h2></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="goalForm" class="stack"><div class="form-grid"><div class="field full"><label>Nome da meta *</label><input name="name" required value="${esc(initialName)}" placeholder="Ex.: Meta Uber e Entregas"></div><div class="field"><label>Valor da meta (R$) *</label><input name="target" type="number" min="0.01" step=".01" required value="${initialTarget}" placeholder="Ex.: 1000"></div><div class="field"><label>Quantidade de dias</label><input name="days" type="number" min="1" max="3650" step="1" value="${initialDays}" inputmode="numeric"></div><div class="field"><label>Data de início</label><input name="startDate" type="date" required value="${esc(initialStart)}"></div><div class="field"><label>Fonte de renda</label><select name="source"><option value="all" ${initialSource==="all"?"selected":""}>Todas as fontes</option><option value="Uber" ${initialSource==="Uber"?"selected":""}>Uber</option><option value="Entregas" ${initialSource==="Entregas"?"selected":""}>Entregas</option><option value="Outros" ${initialSource==="Outros"?"selected":""}>Outros</option></select></div><div class="field"><label>Meta diária calculada</label><input name="dailyTarget" readonly value="${initialDaily!==""?Number(initialDaily).toFixed(2):""}" placeholder="Calculada automaticamente"></div><div class="field"><label>Data final calculada</label><input name="endDate" readonly value="${initialEnd}"></div></div><p class="muted">A meta diária é calculada exatamente dividindo o valor total pela quantidade de dias. Ex.: R$ 1.000 em 30 dias = R$ 33,33 por dia.</p><button class="btn primary" type="submit">${uiIcon("check")} ${editing?"Salvar alterações":"Salvar meta"}</button></form>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
- const targetInput=el.querySelector('[name="target"]');
- const daysInput=el.querySelector('[name="days"]');
- const dailyInput=el.querySelector('[name="dailyTarget"]');
- const recalc=()=>{const target=Number(targetInput.value||0);const days=Math.max(1,Math.min(7,Number(daysInput.value||7)));dailyInput.value=target>0?(target/days).toFixed(2):""};
- targetInput.addEventListener("input",recalc);
- daysInput.addEventListener("input",recalc);
- el.querySelector("#goalForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const name=String(f.get("name")||"").trim();const target=Number(f.get("target"));const days=Math.max(1,Math.min(7,Number(f.get("days")||7)));if(!name||!Number.isFinite(target)||target<=0){toast("Preencha o nome e o valor semanal");return;}const data={...(editing?existing:{}),name,target,days,dailyTarget:target/days,source:f.get("source"),active:true,updatedAt:new Date().toISOString()};await put("goals",data);closeModal(el);await loadData();render();toast(editing?"Meta atualizada":"Meta criada")};
+ const targetInput=el.querySelector('[name="target"]'), daysInput=el.querySelector('[name="days"]'), startInput=el.querySelector('[name="startDate"]'), dailyInput=el.querySelector('[name="dailyTarget"]'), endInput=el.querySelector('[name="endDate"]');
+ const recalc=()=>{const target=Number(targetInput.value||0);const days=Math.max(1,Math.min(3650,Number(daysInput.value||1)));const start=startInput.value||todayISO();dailyInput.value=target>0?(target/days).toFixed(2):"";const d=new Date(`${start}T12:00:00`);d.setDate(d.getDate()+days-1);endInput.value=localDateKey(d)};
+ [targetInput,daysInput,startInput].forEach(i=>i.addEventListener("input",recalc));
+ el.querySelector("#goalForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const name=String(f.get("name")||"").trim();const target=Number(f.get("target"));const days=Math.max(1,Math.min(3650,Number(f.get("days")||1)));const startDate=normalizeDateKey(f.get("startDate")||todayISO());if(!name||!Number.isFinite(target)||target<=0){toast("Preencha o nome e o valor da meta");return;}const data={...(editing?existing:{}),name,target,days,startDate,dailyTarget:target/days,source:f.get("source"),active:true,updatedAt:new Date().toISOString()};await put("goals",data);closeModal(el);await loadData();render();toast(editing?"Meta atualizada":"Meta criada")};
+ recalc();
 }
 
 function earningForm(goalId, existing=null){
@@ -960,13 +969,14 @@ function earningForm(goalId, existing=null){
 }
 
 function earningsForGoalWeek(goal){
- const days=getCurrentWeekDays();
- return earnings.filter(e=>days.includes(e.date)&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||Number(b.id)-Number(a.id));
+ const days=new Set(goalPeriodDays(goal));
+ return earnings.filter(e=>days.has(normalizeDateKey(e.date))&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>(normalizeDateKey(b.date)||"").localeCompare(normalizeDateKey(a.date)||"")||Number(b.id)-Number(a.id));
 }
 
 function earningDayManager(goalId,date){
  const goal=goals.find(g=>g.id===Number(goalId))||activeGoal();
- const items=earnings.filter(e=>e.date===date&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>Number(b.id)-Number(a.id));
+ const targetDate=normalizeDateKey(date);
+ const items=earnings.filter(e=>normalizeDateKey(e.date)===targetDate&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>Number(b.id)-Number(a.id));
  const label=fmtDate(date);
  const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">AJUSTE DIÁRIO</span><h2>Ganhos de ${label}</h2><p>Edite a data, o valor ou exclua um lançamento registrado no dia errado.</p></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><div class="earning-list earning-list-modal">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado neste dia.</div>'}</div><div class="actions" style="margin-top:14px"><button class="btn primary" id="addDayEarning">${uiIcon("plus")} Registrar ganho neste dia</button></div>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
@@ -981,7 +991,7 @@ function earningListRow(e){
 
 function earningsHistoryView(goal){
  const items=earningsForGoalWeek(goal);
- return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Edite ou exclua qualquer lançamento desta semana.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="earning-list">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado nesta semana.</div>'}</div></section>`;
+ return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Edite ou exclua qualquer lançamento dentro do período desta meta.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="earning-list">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado nesta semana.</div>'}</div></section>`;
 }
 
 function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
