@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.0.7";
+const APP_VERSION = "2.0.9";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.0.7", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.0.9", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -191,32 +191,84 @@ async function toggleMusicPlay(){
 }
 async function musicLocalFingerprint(buffer){
   try{
-    const digest=await crypto.subtle.digest("SHA-256",buffer);
+    const source=buffer instanceof ArrayBuffer?buffer:buffer?.buffer;
+    if(!source)return "";
+    const digest=await crypto.subtle.digest("SHA-256",source);
     return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
   }catch(e){return "";}
 }
 
+function musicLocalNameKey(value){return String(value||"").trim().toLowerCase().replace(/\s+/g," ");}
+
+async function musicFindDuplicateLocal(payload){
+  if(!payload?.fileData)return null;
+  const size=Number(payload.fileSize||payload.fileData.byteLength||0);
+  const name=musicLocalNameKey(payload.fileName||payload.title);
+  const fingerprint=String(payload.fingerprint||"");
+  for(const t of musicTracks){
+    if(t.source!=="local" || !t.fileData)continue;
+    const tSize=Number(t.fileSize||t.fileData.byteLength||0);
+    if(!size || !tSize || size!==tSize)continue;
+    let tFingerprint=String(t.fingerprint||"");
+    if(!tFingerprint){
+      tFingerprint=await musicLocalFingerprint(t.fileData);
+      if(tFingerprint){try{await put("musicTracks",{...t,fileSize:tSize,fingerprint:tFingerprint},{touch:false});}catch(e){}}
+    }
+    if(fingerprint && tFingerprint && fingerprint===tFingerprint)return t;
+    if(!fingerprint && !tFingerprint && name && name===musicLocalNameKey(t.fileName||t.title))return t;
+    if(name && name===musicLocalNameKey(t.fileName||t.title) && fingerprint===tFingerprint)return t;
+  }
+  return null;
+}
+
+async function musicRemoveDuplicateLocals(){
+  const locals=musicTracks.filter(t=>t.source==="local"&&t.fileData);
+  if(locals.length<2)return 0;
+  const seen=new Map();
+  const duplicateIds=[];
+  const canonicalByDuplicate=new Map();
+  for(const t of locals.slice().sort((a,b)=>Number(a.id)-Number(b.id))){
+    const size=Number(t.fileSize||t.fileData?.byteLength||0);
+    if(!size)continue;
+    let fp=String(t.fingerprint||"");
+    if(!fp)fp=await musicLocalFingerprint(t.fileData);
+    if(fp){
+      const key=`fp:${fp}`;
+      if(seen.has(key)){duplicateIds.push(Number(t.id));canonicalByDuplicate.set(Number(t.id),Number(seen.get(key).id));}
+      else seen.set(key,t);
+    }
+  }
+  if(!duplicateIds.length)return 0;
+  const duplicateSet=new Set(duplicateIds);
+  for(const id of duplicateIds)await remove("musicTracks",id);
+  for(const pl of musicPlaylists){
+    const oldIds=Array.isArray(pl.trackIds)?pl.trackIds:[];
+    const next=[];
+    for(const id of oldIds){
+      const canonical=canonicalByDuplicate.get(Number(id));
+      const finalId=canonical||Number(id);
+      if(!next.includes(finalId) && !duplicateSet.has(finalId))next.push(finalId);
+    }
+    if(next.length!==oldIds.length || next.some((id,i)=>id!==oldIds[i]))await put("musicPlaylists",{...pl,trackIds:next},{touch:false});
+  }
+  return duplicateIds.length;
+}
+
 async function addMusicTrack(track,playlistId=null){
   const rawUrl=String(track.url||"").trim();
-  if(/(^|\.)youtube\.com($|\.)|youtu\.be/i.test(rawUrl)){toast("Links do YouTube não são aceitos. Importe o arquivo de áudio completo.");return;}
+  if(/(^|\.)youtube\.com($|\.)|youtu\.be/i.test(rawUrl)){toast("Links do YouTube não são aceitos. Importe o arquivo de áudio completo.");return false;}
   const source=track.fileData?"local":(track.fileBlob?"local":(track.source||"direct"));
   const payload={title:track.title||"Música",artist:track.artist||"Artista desconhecido",album:track.album||"",cover:track.cover||"",url:source==="local"?"":rawUrl,youtubeId:"",source,duration:track.duration||0,createdAt:new Date().toISOString()};
   if(track.fileData){payload.fileData=track.fileData;payload.localOnly=true;payload.mimeType=track.mimeType||"audio/mpeg";payload.fileName=track.fileName||track.title||"música";}
   else if(track.fileBlob){
     try{payload.fileData=await track.fileBlob.arrayBuffer();payload.localOnly=true;payload.mimeType=track.fileBlob.type||"audio/mpeg";payload.fileName=track.fileName||track.title||"música";}
-    catch(e){toast("Não foi possível guardar este arquivo de áudio");return;}
+    catch(e){toast("Não foi possível guardar este arquivo de áudio");return false;}
   }
-  if(!payload.url && !payload.fileData){toast("Selecione um arquivo de áudio completo ou informe um link direto de áudio");return;}
+  if(!payload.url && !payload.fileData){toast("Selecione um arquivo de áudio completo ou informe um link direto de áudio");return false;}
   if(source==="local" && payload.fileData){
-    payload.fileSize=payload.fileData.byteLength||0;
+    payload.fileSize=Number(payload.fileData.byteLength||0);
     payload.fingerprint=await musicLocalFingerprint(payload.fileData);
-    const duplicate=musicTracks.find(t=>{
-      if(t.source!=="local" || !t.fileData)return false;
-      if(payload.fingerprint && t.fingerprint && payload.fingerprint===t.fingerprint)return true;
-      const sameName=String(t.fileName||"").toLowerCase()===String(payload.fileName||"").toLowerCase();
-      const sameSize=Number(t.fileSize||t.fileData?.byteLength||0)===Number(payload.fileSize||0);
-      return sameName && sameSize;
-    });
+    const duplicate=await musicFindDuplicateLocal(payload);
     if(duplicate){return false;}
   }
   await put("musicTracks",payload);
@@ -881,11 +933,21 @@ function reminderForm(existing={}){
 }
 
 function goalForm(existing={}){
- const el=modal(`<div class="row"><h2>${existing.id?"Editar":"Nova"} meta</h2><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="goalForm" class="stack"><div class="form-grid"><div class="field full"><label>Nome da meta *</label><input name="name" required value="${esc(existing.name||"Meta Uber e Entregas")}"></div><div class="field"><label>Valor semanal (R$) *</label><input name="target" type="number" min="1" step=".01" required value="${existing.target||700}"></div><div class="field"><label>Divisão diária</label><input name="days" type="number" min="1" max="7" value="7" readonly></div><div class="field"><label>Fonte de renda</label><select name="source"><option value="all" ${existing.source==="all"||!existing.source?"selected":""}>Uber + Entregas</option><option value="Uber" ${existing.source==="Uber"?"selected":""}>Uber</option><option value="Entregas" ${existing.source==="Entregas"?"selected":""}>Entregas</option></select></div><div class="field"><label>Meta diária calculada</label><input name="dailyTarget" readonly value="${Number(existing.dailyTarget||existing.target/7||100).toFixed(2)}"></div></div><p class="muted">A meta será dividida automaticamente por 7 dias. Você poderá registrar ganhos parciais e acompanhar cada dia da semana.</p><button class="btn primary" type="submit">Salvar meta</button></form>`);
+ const editing=!!existing.id;
+ const initialName=editing?String(existing.name||""):"";
+ const initialTarget=editing&&Number(existing.target)>0?Number(existing.target):"";
+ const initialDays=editing&&Number(existing.days)>0?Number(existing.days):7;
+ const initialSource=editing&&existing.source?existing.source:"all";
+ const initialDaily=editing&&Number(existing.dailyTarget)>0?Number(existing.dailyTarget):(initialTarget?Number(initialTarget)/initialDays:"");
+ const el=modal(`<div class="row"><div><span class="eyebrow">${editing?"EDITAR META":"NOVA META"}</span><h2>${editing?"Editar meta":"Criar meta"}</h2></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="goalForm" class="stack"><div class="form-grid"><div class="field full"><label>Nome da meta *</label><input name="name" required value="${esc(initialName)}" placeholder="Ex.: Meta Uber e Entregas"></div><div class="field"><label>Valor semanal (R$) *</label><input name="target" type="number" min="0.01" step=".01" required value="${initialTarget}" placeholder="Ex.: 700"></div><div class="field"><label>Divisão diária</label><input name="days" type="number" min="1" max="7" step="1" value="${initialDays}" inputmode="numeric"></div><div class="field"><label>Fonte de renda</label><select name="source"><option value="all" ${initialSource==="all"?"selected":""}>Todas as fontes</option><option value="Uber" ${initialSource==="Uber"?"selected":""}>Uber</option><option value="Entregas" ${initialSource==="Entregas"?"selected":""}>Entregas</option><option value="Outros" ${initialSource==="Outros"?"selected":""}>Outros</option></select></div><div class="field"><label>Meta diária calculada</label><input name="dailyTarget" readonly value="${initialDaily!==""?Number(initialDaily).toFixed(2):""}" placeholder="Calculada automaticamente"></div></div><p class="muted">Defina o nome, valor semanal, quantidade de dias e fonte de renda. A meta diária será calculada automaticamente com base nesses valores.</p><button class="btn primary" type="submit">${uiIcon("check")} ${editing?"Salvar alterações":"Salvar meta"}</button></form>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
- const targetInput=el.querySelector('[name="target"]');const dailyInput=el.querySelector('[name="dailyTarget"]');
- targetInput.addEventListener("input",()=>dailyInput.value=(Number(targetInput.value||0)/7).toFixed(2));
- el.querySelector("#goalForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const target=Number(f.get("target"));const data={...(existing.id?existing:{}),name:f.get("name"),target,dailyTarget:target/7,source:f.get("source"),active:true,updatedAt:new Date().toISOString()};await put("goals",data);closeModal(el);await loadData();render();toast("Meta salva")};
+ const targetInput=el.querySelector('[name="target"]');
+ const daysInput=el.querySelector('[name="days"]');
+ const dailyInput=el.querySelector('[name="dailyTarget"]');
+ const recalc=()=>{const target=Number(targetInput.value||0);const days=Math.max(1,Math.min(7,Number(daysInput.value||7)));dailyInput.value=target>0?(target/days).toFixed(2):""};
+ targetInput.addEventListener("input",recalc);
+ daysInput.addEventListener("input",recalc);
+ el.querySelector("#goalForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const name=String(f.get("name")||"").trim();const target=Number(f.get("target"));const days=Math.max(1,Math.min(7,Number(f.get("days")||7)));if(!name||!Number.isFinite(target)||target<=0){toast("Preencha o nome e o valor semanal");return;}const data={...(editing?existing:{}),name,target,days,dailyTarget:target/days,source:f.get("source"),active:true,updatedAt:new Date().toISOString()};await put("goals",data);closeModal(el);await loadData();render();toast(editing?"Meta atualizada":"Meta criada")};
 }
 
 function earningForm(goalId, existing=null){
@@ -994,7 +1056,10 @@ async function loadData(){reminders=await all("reminders");goals=await all("goal
      if(t.fileData && !t.blobUrl)t.blobUrl=URL.createObjectURL(new Blob([t.fileData],{type:t.mimeType||"audio/mpeg"}));
    }catch(e){console.warn("[Zyn Music] blob",e)}
  }
- musicSelectedIds=new Set([...musicSelectedIds].filter(id=>musicTracks.some(t=>String(t.id)===String(id))));musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
+ musicSelectedIds=new Set([...musicSelectedIds].filter(id=>musicTracks.some(t=>String(t.id)===String(id))));musicPlaylists=await all("musicPlaylists");if(!musicPlaylists.length){await put("musicPlaylists",{name:"Minha Playlist",trackIds:[],createdAt:new Date().toISOString()});musicPlaylists=await all("musicPlaylists");}
+ const removedMusicDuplicates=await musicRemoveDuplicateLocals();
+ if(removedMusicDuplicates){musicTracks=await all("musicTracks");musicTracks=musicTracks.filter(t=>t.source!=="youtube"&&t.source!=="itunes-preview");toast(`${removedMusicDuplicates} música(s) duplicada(s) removida(s)`);}
+ musicSettings=(await all("musicSettings"))[0]||null;ensureMusicAudio();setupMediaSession();if(musicSettings?.currentTrackId&&!musicCurrentTrackId)musicCurrentTrackId=musicSettings.currentTrackId;
 }
 function bind(){
  document.querySelector("#installBtn")?.addEventListener("click", async ()=>{
@@ -1047,7 +1112,7 @@ function bind(){
  if(currentView==="assistant")content.innerHTML=assistantView();
  document.querySelector("#newReminder")?.addEventListener("click",()=>reminderForm());
  document.querySelector("#newGoal")?.addEventListener("click",()=>goalForm());
- document.querySelector("#createGoal")?.addEventListener("click",()=>goalForm({target:700,dailyTarget:100,name:"Meta Uber e Entregas",source:"all"}));
+ document.querySelector("#createGoal")?.addEventListener("click",()=>goalForm());
  document.querySelector("#quickEarning")?.addEventListener("click",()=>earningForm(activeGoal()?.id));
  document.querySelector("#openGoals")?.addEventListener("click",()=>setView("goals"));
  document.querySelector("#homeReminders")?.addEventListener("click",()=>setView("reminders"));
