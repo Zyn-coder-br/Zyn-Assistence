@@ -1,10 +1,3 @@
-# Zyn Assistente V2.1.0
-
-V2.1.0 inicia a integração da IA Zyn com backend seguro, chat por texto, entrada por voz e ações locais (lembrete, ganho e meta). Também transforma metas em períodos configuráveis: valor total ÷ quantidade de dias.
-
-## IA
-A chave da OpenAI não deve ser colocada no PWA. Use a pasta `server/` para executar o backend e configure a URL dele no painel Zyn.
-
 # Zyn Assistente — V2.0.9
 
 Base: V2.0.8.
@@ -17,3 +10,9 @@ Base: V2.0.8.
 - Importação de música local ficou mais robusta: compara tamanho + fingerprint SHA-256 e verifica os registros atuais do IndexedDB antes de salvar.
 - Registros locais duplicados existentes com o mesmo fingerprint são consolidados automaticamente, preservando a faixa original e corrigindo referências de playlists.
 - Versão/cache do PWA atualizados para 2.0.9 para evitar carregar o JavaScript antigo no GitHub Pages.
+
+## V2.1.1 — IA Zyn
+- Metas usam valor total ÷ quantidade de dias, sem limite de 7 dias.
+- Painel Zyn ganhou conversa por texto e voz.
+- A IA pode criar lembretes, registrar ganhos, criar metas e registrar despesas.
+- A integração preferencial usa Supabase Edge Function; veja `AI-ZYN-SETUP.md`.
