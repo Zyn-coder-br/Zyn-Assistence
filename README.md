@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.0.9
+# Zyn Assistente — V2.1.0
 
 Base: V2.0.8.
 
@@ -9,4 +9,4 @@ Base: V2.0.8.
 - Edição de meta preserva os dados existentes e permite alterar todas essas informações.
 - Importação de música local ficou mais robusta: compara tamanho + fingerprint SHA-256 e verifica os registros atuais do IndexedDB antes de salvar.
 - Registros locais duplicados existentes com o mesmo fingerprint são consolidados automaticamente, preservando a faixa original e corrigindo referências de playlists.
-- Versão/cache do PWA atualizados para 2.0.9 para evitar carregar o JavaScript antigo no GitHub Pages.
+- Versão/cache do PWA atualizados para 2.1.0 para evitar carregar o JavaScript antigo no GitHub Pages.
