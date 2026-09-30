@@ -189,6 +189,13 @@ async function toggleMusicPlay(){
   if(musicAudio.paused){try{await musicAudio.play()}catch(e){toast("Toque no play novamente para iniciar");}}else musicAudio.pause();
   updateMusicUI();updateMediaSession();syncMusicDock();
 }
+async function musicLocalFingerprint(buffer){
+  try{
+    const digest=await crypto.subtle.digest("SHA-256",buffer);
+    return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }catch(e){return "";}
+}
+
 async function addMusicTrack(track,playlistId=null){
   const rawUrl=String(track.url||"").trim();
   if(/(^|\.)youtube\.com($|\.)|youtu\.be/i.test(rawUrl)){toast("Links do YouTube não são aceitos. Importe o arquivo de áudio completo.");return;}
@@ -200,11 +207,23 @@ async function addMusicTrack(track,playlistId=null){
     catch(e){toast("Não foi possível guardar este arquivo de áudio");return;}
   }
   if(!payload.url && !payload.fileData){toast("Selecione um arquivo de áudio completo ou informe um link direto de áudio");return;}
+  if(source==="local" && payload.fileData){
+    payload.fileSize=payload.fileData.byteLength||0;
+    payload.fingerprint=await musicLocalFingerprint(payload.fileData);
+    const duplicate=musicTracks.find(t=>{
+      if(t.source!=="local" || !t.fileData)return false;
+      if(payload.fingerprint && t.fingerprint && payload.fingerprint===t.fingerprint)return true;
+      const sameName=String(t.fileName||"").toLowerCase()===String(payload.fileName||"").toLowerCase();
+      const sameSize=Number(t.fileSize||t.fileData?.byteLength||0)===Number(payload.fileSize||0);
+      return sameName && sameSize;
+    });
+    if(duplicate){return false;}
+  }
   await put("musicTracks",payload);
   await loadData();
   const added=musicTracks.slice().sort((a,b)=>Number(b.id)-Number(a.id))[0];
   if(playlistId){const pl=musicPlaylists.find(p=>String(p.id)===String(playlistId));if(pl){pl.trackIds=[...(pl.trackIds||[]),added.id];await put("musicPlaylists",pl);await loadData();}}
-  toast("Música: Música adicionada");
+  return true;
 }
 function musicPlaylistForm(existing={}){const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">MÚSICA</span><h2>${existing.id?"Editar":"Nova"} playlist</h2><p>Organize suas músicas do jeito que preferir.</p></div><button class="icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="playlistForm" class="stack"><div class="field"><label>Nome da playlist *</label><input name="name" required value="${esc(existing.name||"")}" placeholder="Ex.: Treino, Relax, Foco"></div><button class="btn primary">Salvar playlist</button></form>`);el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#playlistForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await createMusicPlaylist(String(f.get("name")||"").trim());closeModal(el)};}
 async function createMusicPlaylist(name){const clean=String(name||"").trim();if(!clean)return;await put("musicPlaylists",{name:clean,trackIds:[],createdAt:new Date().toISOString()});await loadData();render();toast("Playlist: Playlist criada");}
@@ -221,7 +240,7 @@ function musicView(){
  const playing=!!musicAudio&&!musicAudio.paused;
  return `<div class="module-page"><div class="module-head"><div class="module-icon">${uiIcon("music")}</div><div class="module-head-copy"><h1>Música</h1><p>Sua biblioteca pessoal de músicas completas</p></div><button class="icon-btn" aria-label="Favoritos">${uiIcon("heart")}</button></div><div class="module-tabs music-tabs">${tabs.map(([id,label])=>`<button class="${musicTab===id?'active':''}" data-music-tab="${id}">${label}</button>`).join("")}</div><section class="panel-card now-playing"><div class="now-playing-main">${cover}<div class="music-meta"><span class="eyebrow">TOCANDO AGORA</span><h2 id="musicNowTitle">${esc(track?.title||"Nenhuma música")}</h2><p id="musicNowArtist">${esc(track?.artist||"Adicione uma música da sua biblioteca")}</p><span class="soft-tag" id="musicStatus">${track?.source==="local"?"Biblioteca local":(playing?"Reproduzindo":"Pausado")}</span></div></div><input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" step="0.1"/><div class="music-controls"><button class="music-control music-side" id="musicPrev" aria-label="Anterior" title="Anterior">${uiIcon("previous")}</button><button class="music-control music-play" id="musicPlayBtn" aria-label="${playing?'Pausar':'Reproduzir'}" title="${playing?'Pausar':'Reproduzir'}">${uiIcon(playing?"pause":"playCircle")}</button><button class="music-control music-side" id="musicNext" aria-label="Próxima" title="Próxima">${uiIcon("next")}</button></div><div class="music-extra"><button class="btn" id="musicShuffle">${uiIcon("shuffle")} Aleatório</button><button class="btn primary" id="musicAddFile">${uiIcon("plus")} Adicionar músicas</button><button class="btn" id="musicAddFolder">${uiIcon("folder")} Importar pasta</button><input id="musicFileInput" type="file" accept="audio/*" multiple hidden><input id="musicFolderInput" type="file" accept="audio/*" webkitdirectory directory multiple hidden></div></section>${secondary}</div>`;
 }
-async function addLocalMusicFiles(files){const list=[...files].filter(f=>f&&(f.type||"").startsWith("audio/"));if(!list.length)return toast("Escolha um arquivo de áudio");for(const file of list){const cleanName=(file.name||"Música").replace(/\.[^/.]+$/,"").trim()||"Música";await addMusicTrack({fileBlob:file,fileName:file.name,title:cleanName,artist:"Minha biblioteca",album:"Biblioteca do Zyn",mimeType:file.type},null);}await loadData();render();toast(`Música: ${list.length} música(s) adicionada(s) à biblioteca`);}
+async function addLocalMusicFiles(files){const list=[...files].filter(f=>f&&(f.type||"").startsWith("audio/"));if(!list.length)return toast("Escolha um arquivo de áudio");let added=0,duplicates=0;for(const file of list){const cleanName=(file.name||"Música").replace(/\.[^/.]+$/," ").trim()||"Música";const ok=await addMusicTrack({fileBlob:file,fileName:file.name,title:cleanName,artist:"Minha biblioteca",album:"Biblioteca do Zyn",mimeType:file.type},null);if(ok)added++;else duplicates++;}await loadData();render();toast(`Música: ${added} adicionada(s)${duplicates?` • ${duplicates} duplicada(s) ignorada(s)`:""}`);}
 
 /* V1.8.1 HOTFIX — restored core IndexedDB/helpers accidentally omitted during UI merge. */
 function activeGoal(){return goals.find(g=>g.active!==false)||goals[0]}
@@ -872,7 +891,7 @@ function goalForm(existing={}){
 function earningForm(goalId, existing=null){
  const goal=goals.find(g=>g.id===Number(goalId))||activeGoal();
  const editing=!!existing?.id;
- const el=modal(`<div class="row"><div><span class="eyebrow">${editing?"AJUSTAR GANHO":"NOVO GANHO"}</span><h2>${editing?"Editar ganho":"Registrar ganho"}</h2></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="earningForm" class="stack"><div class="form-grid"><div class="field"><label>Valor (R$) *</label><input name="amount" type="number" min=".01" step=".01" required placeholder="100" value="${editing?Number(existing.amount||0):""}"></div><div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(existing?.date||todayISO())}"></div><div class="field"><label>Origem</label><select name="source"><option ${existing?.source==="Uber"?"selected":""}>Uber</option><option ${existing?.source==="Entregas"?"selected":""}>Entregas</option></select></div><div class="field"><label>Observação</label><input name="notes" value="${esc(existing?.notes||"")}" placeholder="Ex.: turno da noite"></div></div><p class="muted">Meta diária atual: ${goal?money(goal.dailyTarget):"—"}. Você pode corrigir a data se registrar o ganho no dia errado.</p><div class="actions"><button class="btn primary" type="submit">${uiIcon("check")} ${editing?"Salvar alteração":"Registrar ganho"}</button>${editing?`<button class="btn danger" type="button" id="deleteEarning">${uiIcon("trash")} Excluir</button>`:""}</div></form>`);
+ const el=modal(`<div class="row"><div><span class="eyebrow">${editing?"AJUSTAR GANHO":"NOVO GANHO"}</span><h2>${editing?"Editar ganho":"Registrar ganho"}</h2></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><form id="earningForm" class="stack"><div class="form-grid"><div class="field"><label>Valor (R$) *</label><input name="amount" type="number" min=".01" step=".01" required placeholder="100" value="${editing?Number(existing.amount||0):""}"></div><div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(existing?.date||todayISO())}"></div><div class="field"><label>Origem</label><select name="source"><option ${existing?.source==="Uber"?"selected":""}>Uber</option><option ${existing?.source==="Entregas"?"selected":""}>Entregas</option><option ${existing?.source==="Outros"?"selected":""}>Outros</option></select></div><div class="field"><label>Observação</label><input name="notes" value="${esc(existing?.notes||"")}" placeholder="Ex.: turno da noite"></div></div><p class="muted">Meta diária atual: ${goal?money(goal.dailyTarget):"—"}. Você pode corrigir a data se registrar o ganho no dia errado.</p><div class="actions"><button class="btn primary" type="submit">${uiIcon("check")} ${editing?"Salvar alteração":"Registrar ganho"}</button>${editing?`<button class="btn danger" type="button" id="deleteEarning">${uiIcon("trash")} Excluir</button>`:""}</div></form>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
  el.querySelector("#earningForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const data={...(existing||{}),amount:Number(f.get("amount")),date:f.get("date"),source:f.get("source"),notes:f.get("notes"),goalId:goal?.id||existing?.goalId||null,createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};await put("earnings",data);closeModal(el);await loadData();render();toast(editing?"Ganho ajustado":"Ganho registrado")};
  el.querySelector("#deleteEarning")?.addEventListener("click",async()=>{if(await confirmZyn("Excluir este ganho? O valor será removido do progresso da meta.","Excluir ganho")){await remove("earnings",Number(existing.id));closeModal(el);await loadData();render();toast("Ganho excluído")}});
@@ -887,16 +906,20 @@ function earningDayManager(goalId,date){
  const goal=goals.find(g=>g.id===Number(goalId))||activeGoal();
  const items=earnings.filter(e=>e.date===date&&(!goal?.source||goal.source==="all"||goal.source===e.source)).sort((a,b)=>Number(b.id)-Number(a.id));
  const label=fmtDate(date);
- const el=modal(`<div class="row"><div><span class="eyebrow">AJUSTE DIÁRIO</span><h2>Ganhos de ${label}</h2><p class="muted">Edite a data, o valor ou exclua um lançamento se ele foi registrado no dia errado.</p></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><div class="modern-list">${items.map(e=>`<div class="modern-list-row earning-history-row"><div class="row-icon">${uiIcon("money")}</div><div class="row-main"><b>${money(e.amount)}</b><span>${esc(e.source||"Sem origem")}${e.notes?` • ${esc(e.notes)}`:""} • ${fmtDate(e.date)}</span></div><div class="actions"><button class="btn icon-btn" data-earning-edit="${e.id}" aria-label="Editar ganho">${uiIcon("edit")}</button><button class="btn icon-btn danger" data-earning-delete="${e.id}" aria-label="Excluir ganho">${uiIcon("trash")}</button></div></div>`).join("")||'<div class="empty">Nenhum ganho registrado neste dia.</div>'}</div><div class="actions" style="margin-top:14px"><button class="btn primary" id="addDayEarning">${uiIcon("plus")} Registrar ganho neste dia</button></div>`);
+ const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">AJUSTE DIÁRIO</span><h2>Ganhos de ${label}</h2><p>Edite a data, o valor ou exclua um lançamento registrado no dia errado.</p></div><button class="btn icon-btn" id="closeModal" aria-label="Fechar">${uiIcon("close")}</button></div><div class="earning-list earning-list-modal">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado neste dia.</div>'}</div><div class="actions" style="margin-top:14px"><button class="btn primary" id="addDayEarning">${uiIcon("plus")} Registrar ganho neste dia</button></div>`);
  el.querySelector("#closeModal").onclick=()=>closeModal(el);
  el.querySelector("#addDayEarning").onclick=()=>{closeModal(el);earningForm(goal?.id,{date})};
  el.querySelectorAll("[data-earning-edit]").forEach(b=>b.onclick=()=>{const e=earnings.find(x=>Number(x.id)===Number(b.dataset.earningEdit));if(e){closeModal(el);earningForm(goal?.id,e)}});
  el.querySelectorAll("[data-earning-delete]").forEach(b=>b.onclick=async()=>{const e=earnings.find(x=>Number(x.id)===Number(b.dataset.earningDelete));if(e&&await confirmZyn("Excluir este ganho? O valor será removido do progresso da meta.","Excluir ganho")){await remove("earnings",Number(e.id));closeModal(el);await loadData();render();toast("Ganho excluído")}});
 }
 
+function earningListRow(e){
+ return `<div class="earning-list-row"><div class="earning-list-top"><strong>${e.amount>=0?"+":""}${money(e.amount).replace("R$ ","R$ ")}</strong><time>${fmtDate(e.date)}</time></div><div class="earning-list-bottom"><span>${esc(e.source||"Outros")}${e.notes?` • ${esc(e.notes)}`:""}</span><div class="earning-list-actions"><button class="btn icon-btn" data-earning-edit="${e.id}" aria-label="Editar ganho" title="Editar">${uiIcon("edit")}</button><button class="btn icon-btn danger" data-earning-delete="${e.id}" aria-label="Excluir ganho" title="Excluir">${uiIcon("trash")}</button></div></div></div>`;
+}
+
 function earningsHistoryView(goal){
  const items=earningsForGoalWeek(goal);
- return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Corrija facilmente lançamentos registrados no dia errado.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="modern-list">${items.map(e=>`<div class="modern-list-row earning-history-row"><div class="row-icon">${uiIcon("money")}</div><div class="row-main"><b>${money(e.amount)}</b><span>${fmtDate(e.date)} • ${esc(e.source||"Sem origem")}${e.notes?` • ${esc(e.notes)}`:""}</span></div><div class="actions"><button class="btn icon-btn" data-earning-edit="${e.id}" aria-label="Editar ganho" title="Editar">${uiIcon("edit")}</button><button class="btn icon-btn danger" data-earning-delete="${e.id}" aria-label="Excluir ganho" title="Excluir">${uiIcon("trash")}</button></div></div>`).join("")||'<div class="empty">Nenhum ganho registrado nesta semana.</div>'}</div></section>`;
+ return `<section class="panel-card earnings-history-panel"><div class="panel-heading"><div><h3>${uiIcon("money")} Histórico de ganhos</h3><span>Edite ou exclua qualquer lançamento desta semana.</span></div><span class="soft-tag">${items.length} lançamento(s)</span></div><div class="earning-list">${items.map(earningListRow).join("")||'<div class="empty">Nenhum ganho registrado nesta semana.</div>'}</div></section>`;
 }
 
 function setCloudStatus(status,message){cloudStatus=status;cloudMessage=message||"";const el=document.querySelector("#cloudStatus");if(el){el.className=`cloud-status ${status}`;el.title=cloudMessage;el.innerHTML=`<span></span>${esc(message||status)}`;}}
