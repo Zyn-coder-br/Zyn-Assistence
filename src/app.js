@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.2.1";
+const APP_VERSION = "2.2.2";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.2.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.2.2", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -38,19 +38,6 @@ let musicSelectedIds = new Set();
 let youtubePlayer = null;
 const app = document.querySelector("#app");
 let appUnlocked = true;
-let zynAiBusy = false;
-let zynAiResponseId = sessionStorage.getItem("zyn-ai-response-id") || "";
-let zynAiMessages = (()=>{try{return JSON.parse(localStorage.getItem("zyn-ai-messages")||"[]")}catch(e){return []}})();
-const ZYN_AI_ENDPOINT = localStorage.getItem("zyn-ai-endpoint") || `${SUPABASE_URL}/functions/v1/zyn-ai`;
-function saveZynAiMessages(){zynAiMessages=zynAiMessages.slice(-40);localStorage.setItem("zyn-ai-messages",JSON.stringify(zynAiMessages));}
-function addZynAiMessage(role,text,meta={}){zynAiMessages.push({role,text:String(text||""),createdAt:new Date().toISOString(),...meta});saveZynAiMessages();}
-function zynAiContext(){
-  const goalSummary=goals.map(g=>({id:g.id,name:g.name,target:g.target,days:g.days,startDate:g.startDate,endDate:goalEndDate(g),dailyTarget:g.dailyTarget,source:g.source,progress:Number(goalProgress(g).toFixed(1)),earned:Number(goalEarnings(g).toFixed(2))}));
-  const earningSummary=earnings.slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)||Number(b.id)-Number(a.id)).slice(0,20).map(e=>({id:e.id,amount:e.amount,date:normalizeDateKey(e.date),source:e.source,notes:e.notes||""}));
-  const financeSummary={cashBalance:Number(financeProfile?.cashBalance||0),accounts:financeAccounts.map(a=>({id:a.id,name:a.name,balance:Number(a.balance||0),type:a.type})),recent:financeTransactions.slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,15).map(x=>({id:x.id,type:x.type,amount:x.amount,description:x.description,date:normalizeDateKey(x.date),category:x.category,account:x.account||""}))};
-  return {today:todayISO(),localDate:new Date().toLocaleDateString("pt-BR"),goals:goalSummary,recentEarnings:earningSummary,finance:financeSummary,reminders:reminders.filter(r=>!r.done).slice(0,20).map(r=>({id:r.id,title:r.title,date:r.date,time:r.time||"",category:r.category||"Geral"}))};
-}
-function zynAiEndpoint(){return localStorage.getItem("zyn-ai-endpoint") || `${SUPABASE_URL}/functions/v1/zyn-ai`;}
 function markAppUnlocked(){appUnlocked=true;localStorage.setItem("zyn-app-unlocked","true");}
 function lockApp(){appUnlocked=true;localStorage.setItem("zyn-app-unlocked","true");}
 
@@ -312,77 +299,7 @@ function activeGoal(){return goals.find(g=>g.active!==false)||goals[0]}
 
 function all(name){return new Promise((resolve,reject)=>{const r=store(name).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
 
-function assistantView(){
- const configured=zynAiEndpoint();
- const history=zynAiMessages.map((m,i)=>`<div class="zyn-chat-row ${m.role==='user'?'user':'assistant'}"><div class="zyn-chat-avatar">${m.role==='user'?uiIcon('user'):uiIcon('assistant')}</div><div class="zyn-chat-bubble">${esc(m.text).replace(/\n/g,'<br>')}</div></div>`).join('');
- return `<div class="module-page assistant-page">
-  <div class="module-head"><div class="module-icon">${uiIcon('assistant')}</div><div class="module-head-copy"><h1>Zyn</h1><p>Seu assistente pessoal para organizar e executar tarefas dentro do aplicativo.</p></div><button class="icon-btn" id="zynAiSettings" aria-label="Configurações do Zyn" title="Configurações do Zyn">${uiIcon('settings')}</button></div>
-  <section class="panel-card zyn-ai-hero"><div class="zyn-ai-orb">${uiIcon('assistant')}</div><div><span class="eyebrow">ZYN INTELIGENTE</span><h2>Fale comigo</h2><p>Peça para criar lembretes, metas, registrar ganhos e lançamentos financeiros. O Zyn pode executar essas ações no seu aparelho.</p><span class="soft-tag">${currentUser()?'Conta conectada':'Entre no Zyn Cloud para usar a IA'}</span></div></section>
-  <section class="panel-card zyn-chat-panel"><div class="zyn-chat-head"><div><h3>Conversa</h3><span>Endpoint: ${esc(configured)}</span></div><button class="btn" id="zynAiClear">${uiIcon('trash')} Limpar</button></div><div id="zynChatMessages" class="zyn-chat-messages">${history||`<div class="zyn-chat-empty"><div class="zyn-chat-empty-icon">${uiIcon('assistant')}</div><h3>Olá! Eu sou o Zyn.</h3><p>Experimente: “Crie uma meta de R$ 1.000 em 30 dias” ou “Registra R$ 70 de entregas hoje”.</p></div>`}</div><form id="zynAiForm" class="zyn-chat-composer"><textarea id="zynAiInput" rows="1" placeholder="Digite para o Zyn..." aria-label="Mensagem para o Zyn"></textarea><button class="zyn-send-btn" type="submit" aria-label="Enviar" title="Enviar">${uiIcon('send')}</button></form><p class="zyn-ai-note">As informações necessárias do aplicativo podem ser enviadas ao serviço de IA para responder e executar sua solicitação. A chave da OpenAI permanece no backend.</p></section>
-  <section class="panel-card"><div class="panel-heading"><div><h3>O que o Zyn já pode fazer</h3><span>Primeira etapa da inteligência do aplicativo</span></div></div><div class="zyn-capabilities"><button class="zyn-suggestion" data-zyn-prompt="Crie uma meta de R$ 1.000 em 30 dias">${uiIcon('goal')} <span>Criar meta</span></button><button class="zyn-suggestion" data-zyn-prompt="Me lembra amanhã às 8 horas de pagar a internet">${uiIcon('calendar')} <span>Criar lembrete</span></button><button class="zyn-suggestion" data-zyn-prompt="Registra R$ 70 de entregas hoje">${uiIcon('money')} <span>Registrar ganho</span></button><button class="zyn-suggestion" data-zyn-prompt="Registra uma despesa de R$ 25 de alimentação hoje">${uiIcon('finance')} <span>Registrar despesa</span></button></div></section>
- </div>`;
-}
-
-async function zynAiSettingsForm(){
- const current=zynAiEndpoint();
- const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">ZYN IA</span><h2>Configurar conexão</h2><p>O endpoint padrão usa a Edge Function do seu projeto Supabase.</p></div><button class="icon-btn" id="close" aria-label="Fechar">${uiIcon('close')}</button></div><form id="zynAiSettingsForm" class="stack"><div class="field"><label>Endpoint da IA</label><input name="endpoint" type="url" required value="${esc(current)}"></div><p class="muted">Não coloque uma chave da OpenAI aqui. Ela deve permanecer no backend.</p><div class="actions"><button class="btn" type="button" id="reset">Restaurar padrão</button><button class="btn primary" type="submit">Salvar</button></div></form>`);
- el.querySelector('#close').onclick=()=>closeModal(el);
- el.querySelector('#reset').onclick=()=>{el.querySelector('[name="endpoint"]').value=`${SUPABASE_URL}/functions/v1/zyn-ai`};
- el.querySelector('#zynAiSettingsForm').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const endpoint=String(f.get('endpoint')||'').trim().replace(/\/$/,'');if(!/^https:\\/\\//i.test(endpoint)){toast('Informe um endpoint HTTPS válido');return;}localStorage.setItem('zyn-ai-endpoint',endpoint);closeModal(el);render();toast('Zyn IA: conexão salva')};
-}
-function zynAiRenderMessages(){const box=document.querySelector('#zynChatMessages');if(!box)return;box.innerHTML=zynAiMessages.map(m=>`<div class="zyn-chat-row ${m.role==='user'?'user':'assistant'}"><div class="zyn-chat-avatar">${m.role==='user'?uiIcon('user'):uiIcon('assistant')}</div><div class="zyn-chat-bubble">${esc(m.text).replace(/\n/g,'<br>')}</div></div>`).join('')||`<div class="zyn-chat-empty"><div class="zyn-chat-empty-icon">${uiIcon('assistant')}</div><h3>Olá! Eu sou o Zyn.</h3><p>Peça algo para começar.</p></div>`;box.scrollTop=box.scrollHeight;}
-function zynAiSetBusy(busy){zynAiBusy=busy;const input=document.querySelector('#zynAiInput'),btn=document.querySelector('#zynAiForm button[type="submit"]');if(input)input.disabled=busy;if(btn){btn.disabled=busy;btn.classList.toggle('loading',busy)}}
-async function zynAiExecuteTool(call){
- const args=typeof call.arguments==='string'?JSON.parse(call.arguments||'{}'):(call.arguments||{});
- if(call.name==='create_reminder'){
-   const date=normalizeDateKey(args.date||todayISO());
-   const data={title:String(args.title||'Lembrete').trim(),category:String(args.category||'Geral'),date,time:String(args.time||''),repeat:String(args.repeat||'none'),notes:String(args.notes||''),done:false};
-   if(!data.title)throw new Error('O lembrete precisa de um título.'); await put('reminders',data);return {ok:true,action:'create_reminder',message:`Lembrete “${data.title}” criado para ${fmtDate(date)}${data.time?` às ${data.time}`:''}.`};
- }
- if(call.name==='create_goal'){
-   const target=Number(args.target||0),days=Math.max(1,Math.min(3650,Number(args.days||1))),startDate=normalizeDateKey(args.startDate||todayISO());
-   if(!target)throw new Error('O valor da meta não foi informado.');
-   const source=['all','Uber','Entregas','Outros'].includes(args.source)?args.source:'all';
-   const data={name:String(args.name||'Nova meta').trim(),target,days,startDate,dailyTarget:target/days,source,active:true};await put('goals',data);return {ok:true,action:'create_goal',message:`Meta “${data.name}” criada: ${money(target)} em ${days} dias (${money(target/days)}/dia).`};
- }
- if(call.name==='register_earning'){
-   const amount=Number(args.amount||0),date=normalizeDateKey(args.date||todayISO()),source=['Uber','Entregas','Outros'].includes(args.source)?args.source:'Outros';
-   if(!amount)throw new Error('O valor do ganho não foi informado.');
-   await put('earnings',{amount,date,source,notes:String(args.notes||''),goalId:activeGoal()?.id||null,createdAt:new Date().toISOString()});return {ok:true,action:'register_earning',message:`Ganho de ${money(amount)} em ${source} registrado para ${fmtDate(date)}.`};
- }
- if(call.name==='register_finance_transaction'){
-   const amount=Number(args.amount||0),type=['expense','income','saving'].includes(args.type)?args.type:'expense',date=normalizeDateKey(args.date||todayISO());
-   if(!amount)throw new Error('O valor do lançamento não foi informado.');
-   const wanted=String(args.account||'').trim().toLowerCase();let accountId='cash',accountName='Dinheiro';
-   if(wanted){const acc=financeAccounts.find(a=>String(a.name||'').trim().toLowerCase()===wanted);if(acc){accountId=`card:${acc.id}`;accountName=acc.name;}}
-   const data={type,amount,description:String(args.description||'Lançamento Zyn').trim(),date,category:String(args.category||'Outros'),accountId,account:accountName,notes:String(args.notes||'')};
-   await put('financeTransactions',data);const delta=(type==='income'||type==='saving'?1:-1)*amount;await adjustFinanceAccount(accountId,delta);return {ok:true,action:'register_finance_transaction',message:`${type==='expense'?'Despesa':'Entrada'} de ${money(amount)} registrada em ${accountName}.`};
- }
- throw new Error(`Ação não reconhecida: ${call.name}`);
-}
-async function zynAiRequest(message,toolOutputs=null){
- const session=currentUser();if(!session?.access_token)throw new Error('Entre no Zyn Cloud para ativar a IA.');
- const payload={message,context:zynAiContext(),previousResponseId:zynAiResponseId||null,toolOutputs};
- const res=await fetch(zynAiEndpoint(),{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},body:JSON.stringify(payload)});
- let data={};try{data=await res.json()}catch(e){}
- if(!res.ok)throw new Error(data.error||`Erro ${res.status} ao conectar com a IA.`);
- zynAiResponseId=data.responseId||zynAiResponseId||'';if(zynAiResponseId)sessionStorage.setItem('zyn-ai-response-id',zynAiResponseId);return data;
-}
-async function zynAiSend(message){
- const text=String(message||'').trim();if(!text||zynAiBusy)return;
- addZynAiMessage('user',text);zynAiRenderMessages();zynAiSetBusy(true);
- try{
-   let data=await zynAiRequest(text,null);let rounds=0;
-   while(data.type==='tool_calls'&&rounds<4){
-     rounds++;const outputs=[];
-     for(const call of data.calls||[]){try{const result=await zynAiExecuteTool(call);outputs.push({type:'function_call_output',call_id:call.callId,output:JSON.stringify(result)});}catch(err){outputs.push({type:'function_call_output',call_id:call.callId,output:JSON.stringify({ok:false,error:err?.message||'Falha na ação'})});}}
-     await loadData();render();
-     data=await zynAiRequest('',outputs);
-   }
-   const answer=data.text||'Concluído.';addZynAiMessage('assistant',answer);zynAiRenderMessages();
- }catch(err){addZynAiMessage('assistant',`Não consegui concluir: ${err?.message||'erro desconhecido'}`);zynAiRenderMessages();}
- finally{zynAiSetBusy(false);const input=document.querySelector('#zynAiInput');if(input){input.value='';input.focus();}}
-}
+function assistantView(){return `<div class="section-title"><div><span class="eyebrow">CENTRO DO ZYN</span><h2>Zyn Assistente</h2><div class="muted">Seu assistente pessoal para conectar organização, bem-estar, finanças e música.</div></div></div><section class="assistant-hero card full"><div class="assistant-orb">${uiIcon("assistant")}</div><div><span class="eyebrow">ASSISTENTE PESSOAL</span><h2>O que você quer organizar hoje?</h2><p class="muted">Esta área será o centro inteligente do Zyn. Por enquanto, use os painéis abaixo para acessar cada parte da sua rotina.</p></div></section><div class="assistant-actions"><button class="home-panel-card" data-home-view="planning"><span class="panel-icon">${uiIcon("plan")}</span><div class="panel-copy"><h3>Planejamento</h3><p>Lembretes e metas.</p></div></button><button class="home-panel-card" data-home-view="wellness"><span class="panel-icon">${uiIcon("well")}</span><div class="panel-copy"><h3>Bem-estar</h3><p>GYM, Dietas e Hábitos.</p></div></button><button class="home-panel-card" data-home-view="finance"><span class="panel-icon">${uiIcon("finance")}</span><div class="panel-copy"><h3>Finanças</h3><p>Seu controle financeiro.</p></div></button><button class="home-panel-card" data-home-view="music"><span class="panel-icon">${uiIcon("music")}</span><div class="panel-copy"><h3>Zyn Music</h3><p>Seu player pessoal.</p></div></button></div>`}
 
 function authGateView(){
   const email = currentUser()?.email || "";
@@ -1016,7 +933,6 @@ function financeBillForm(existing={}){
  el.querySelector("#close").onclick=()=>closeModal(el);
  el.querySelector("#financeBillForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const data={...(editing?existing:{}),name:String(f.get("name")||"").trim(),amount:Number(f.get("amount")||0),dueDate:f.get("dueDate")||todayISO(),active:existing.active!==false};await put("financeBills",data);closeModal(el);await loadData();render();toast(editing?"Conta fixa atualizada":"Conta cadastrada")};
 }
-
 function habitsView(){return `<div class="section-title"><h2>Hábitos e GYM</h2></div><div class="card full"><div class="empty">Módulo preparado para a próxima etapa. A estrutura local já reserva espaço para hábitos e treinos.</div></div>`}
 
 function reminderForm(existing={}){
@@ -1204,10 +1120,6 @@ function bind(){
  if(currentView==="habits")content.innerHTML=habitsView();
  if(currentView==="music")content.innerHTML=musicView();
  if(currentView==="assistant")content.innerHTML=assistantView();
- document.querySelector('#zynAiSettings')?.addEventListener('click',zynAiSettingsForm);
- document.querySelector('#zynAiClear')?.addEventListener('click',async()=>{if(await confirmZyn('Limpar toda a conversa do Zyn?','Limpar conversa')){zynAiMessages=[];zynAiResponseId='';sessionStorage.removeItem('zyn-ai-response-id');saveZynAiMessages();zynAiRenderMessages();}});
- document.querySelector('#zynAiForm')?.addEventListener('submit',e=>{e.preventDefault();zynAiSend(document.querySelector('#zynAiInput')?.value||'');});
- document.querySelectorAll('[data-zyn-prompt]').forEach(b=>b.addEventListener('click',()=>zynAiSend(b.dataset.zynPrompt||'')));
  document.querySelector("#newReminder")?.addEventListener("click",()=>reminderForm());
  document.querySelector("#newGoal")?.addEventListener("click",()=>goalForm());
  document.querySelector("#createGoal")?.addEventListener("click",()=>goalForm());
