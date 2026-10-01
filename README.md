@@ -10,3 +10,9 @@ Base: V2.0.8.
 - Importação de música local ficou mais robusta: compara tamanho + fingerprint SHA-256 e verifica os registros atuais do IndexedDB antes de salvar.
 - Registros locais duplicados existentes com o mesmo fingerprint são consolidados automaticamente, preservando a faixa original e corrigindo referências de playlists.
 - Versão/cache do PWA atualizados para 2.1.1 para evitar carregar o JavaScript antigo no GitHub Pages.
+
+## V2.2.1 — IA Zyn
+- Chat inteligente no painel Zyn.
+- Edge Function `supabase/functions/zyn-ai/index.ts`.
+- Ações iniciais: metas, lembretes, ganhos e lançamentos financeiros.
+- Chave OpenAI mantida somente no backend.
