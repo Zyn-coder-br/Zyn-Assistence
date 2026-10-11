@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.2.2
+# Zyn Assistente — V2.2.3
 
 Base: V2.0.8.
 
@@ -10,3 +10,10 @@ Base: V2.0.8.
 - Importação de música local ficou mais robusta: compara tamanho + fingerprint SHA-256 e verifica os registros atuais do IndexedDB antes de salvar.
 - Registros locais duplicados existentes com o mesmo fingerprint são consolidados automaticamente, preservando a faixa original e corrigindo referências de playlists.
 - Versão/cache do PWA atualizados para 2.2.2 para evitar carregar o JavaScript antigo no GitHub Pages.
+
+
+## V2.2.3 — Zyn Music redesign
+- Player com identidade visual roxo/magenta, disco circular e progresso destacado.
+- Ações rápidas de favoritos, fila e recentes.
+- Lista da biblioteca com controle de favoritos.
+- Mantida a arquitetura atual de armazenamento e reprodução de arquivos locais/URLs de áudio.
