@@ -372,3 +372,60 @@ body{background:radial-gradient(circle at 20% -10%,rgba(130,92,255,.12),transpar
 .fixed-bill-actions .icon-btn{width:42px;height:42px;padding:0;display:grid;place-items:center}
 .fixed-bill-actions .icon-btn svg{width:18px;height:18px}
 @media(max-width:620px){.fixed-bill-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto}.fixed-bill-row .fixed-bill-actions{grid-column:1 / -1;justify-content:flex-end;margin-top:2px}}
+
+
+/* Zyn Music 2.2.3 — identidade visual própria inspirada em players modernos */
+.zyn-music-page{--music-glow:#d94bb8;--music-deep:#311a3d;--music-mid:#6f2c66}
+.music-module-head{margin-bottom:16px}
+.music-module-head .module-icon{background:linear-gradient(145deg,#8f54e9,#d94bb8);color:#fff;box-shadow:0 8px 26px #8f54e933}
+.zyn-player-stage{position:relative;overflow:hidden;padding:clamp(18px,4vw,30px);border:1px solid rgba(217,75,184,.2);background:radial-gradient(ellipse at 50% 20%,rgba(170,56,150,.30),transparent 42%),linear-gradient(160deg,#2b1838 0%,#251a31 52%,#191827 100%);color:#fff;box-shadow:0 18px 44px #100b1d44}
+.zyn-player-stage:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 25%,rgba(255,255,255,.025),transparent 70%);pointer-events:none}
+.music-stage-top{position:relative;display:flex;align-items:center;gap:8px;color:#d6c5df;font-size:10px;font-weight:800;letter-spacing:.16em}
+.music-live-dot{width:7px;height:7px;border-radius:50%;background:#e56ecb;box-shadow:0 0 0 4px #e56ecb20}
+.music-stage-menu{margin-left:auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:1px solid #ffffff22;background:#ffffff0b;color:#fff}
+.zyn-disc-wrap{width:min(68vw,290px);aspect-ratio:1;margin:18px auto 20px;position:relative;display:grid;place-items:center}
+.zyn-disc-progress{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from -40deg,#f16acb 0deg,#985be8 110deg,#ffffff18 111deg 360deg);mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px))}
+.zyn-disc{width:86%;height:86%;border-radius:50%;position:relative;display:grid;place-items:center;padding:10px;background:radial-gradient(circle at 30% 20%,#b04cc5,#6b2878 52%,#25152f 100%);box-shadow:0 18px 38px #09061070,inset 0 0 0 8px #ffffff09}
+.zyn-disc:after{content:"";position:absolute;inset:0;border-radius:50%;background:repeating-radial-gradient(circle,transparent 0 17px,#ffffff09 18px 19px);pointer-events:none}
+.zyn-disc img,.zyn-disc .music-cover-placeholder{width:100%;height:100%;max-width:100%;max-height:100%;border-radius:50%;object-fit:cover;flex:unset;background:linear-gradient(145deg,#9a48c4,#ed59b5);display:grid;place-items:center;color:#fff;font-size:54px}
+.zyn-disc-center{position:absolute;width:14%;aspect-ratio:1;border-radius:50%;background:#f8dff4;border:5px solid #48224e;box-shadow:0 0 0 2px #ffffff50;z-index:2}
+.zyn-disc-wrap.is-playing .zyn-disc{animation:zyn-disc-spin 16s linear infinite}
+@keyframes zyn-disc-spin{to{transform:rotate(360deg)}}
+.zyn-track-title{text-align:center;position:relative;min-width:0}
+.zyn-track-title h2{font-size:clamp(21px,5vw,28px);font-weight:800;letter-spacing:-.035em;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zyn-track-title p{font-size:14px;color:#d4c0df;margin:6px 0 10px}
+.music-source-chip{display:inline-flex;border:1px solid #ffffff24;border-radius:999px;padding:5px 9px;color:#e8c6e8;font-size:9px;letter-spacing:.12em;font-weight:800}
+.zyn-track-actions{display:flex;justify-content:center;gap:clamp(12px,5vw,26px);margin:18px 0 4px}
+.zyn-round-action{width:38px;height:38px;display:grid;place-items:center;border:1px solid #ffffff20;border-radius:50%;background:#ffffff08;color:#d9c5e1}
+.zyn-round-action.is-favorite,.music-row-heart.is-favorite{color:#ff78cb;border-color:#ff78cb55;background:#ff78cb12}
+.zyn-progress-wrap{margin-top:10px}
+.zyn-player-stage .music-times{color:#c6b3d1;font-size:11px}
+.zyn-player-stage .music-progress{margin:4px 0 0;accent-color:#e56ac9;height:4px;cursor:pointer}
+.zyn-main-controls{gap:clamp(24px,8vw,38px);margin:15px 0 19px}
+.zyn-main-controls .music-control{border:0;background:transparent;color:#e7d8ed;width:44px;height:44px}
+.zyn-main-controls .music-control.music-play{width:62px;height:62px;background:linear-gradient(145deg,#ef71ce,#a45df0);box-shadow:0 8px 22px #b957cf44;color:#fff}
+.zyn-player-bottom{display:flex;justify-content:center;align-items:center;gap:9px;flex-wrap:wrap;border-top:1px solid #ffffff18;padding-top:16px;color:#cbb8d4;font-size:11px}
+.zyn-player-bottom>span{margin-right:auto}
+.zyn-player-bottom .btn{min-height:36px;border-color:#ffffff20;background:#ffffff0a;color:#fff}
+.zyn-player-bottom .btn.primary{background:linear-gradient(120deg,#9a58e7,#d24fb8);border:0}
+.zyn-music-page .music-tabs{margin:16px 0 12px;padding:5px;display:flex;gap:5px;overflow-x:auto;border:1px solid var(--border);border-radius:15px;background:var(--surface)}
+.zyn-music-page .music-tabs button{flex:1;min-width:0;border:0;border-radius:10px;padding:11px 8px;background:transparent;color:var(--muted);font-weight:700;font-size:12px}
+.zyn-music-page .music-tabs button.active{background:linear-gradient(120deg,#8d55df,#c94eb5);color:white;box-shadow:0 4px 14px #8d55df2b}
+.zyn-music-page .music-library-card,.zyn-music-page .music-playlists-card{border-radius:20px;overflow:hidden}
+.zyn-music-page .music-track-row{gap:10px;padding:12px 10px}
+.zyn-music-page .music-track-row .row-icon{background:linear-gradient(145deg,#7c45c9,#c14aa9);color:#fff;border-radius:12px}
+.music-row-heart{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--border);border-radius:50%;background:var(--surface2);color:var(--muted);flex:0 0 34px}
+.music-playlist-art{background:linear-gradient(145deg,#7c45c9,#c14aa9)!important;color:#fff!important}
+.music-queue-list{max-height:min(58vh,480px);overflow:auto}
+.music-queue-row{width:100%;border:0;background:transparent;color:var(--text);text-align:left;display:flex;align-items:center;gap:12px;padding:12px}
+.queue-index{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.music-queue-current{font-size:10px;color:var(--primary);font-weight:700}
+@media(max-width:600px){
+ .zyn-player-stage{padding:17px 14px;border-radius:22px}
+ .zyn-disc-wrap{width:min(65vw,250px);margin:16px auto}
+ .zyn-player-bottom{justify-content:space-between}
+ .zyn-player-bottom>span{width:100%;margin:0 0 3px}
+ .zyn-player-bottom .btn{flex:1;font-size:11px;padding-inline:8px}
+ .zyn-music-page .music-track-row .row-main b{max-width:42vw}
+ .zyn-music-page .music-bulk-actions .btn{min-width:0}
+}
