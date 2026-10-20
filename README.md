@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.2.3
+# Zyn Assistente — V2.3.0
 
 Base: V2.0.8.
 
@@ -17,3 +17,11 @@ Base: V2.0.8.
 - Ações rápidas de favoritos, fila e recentes.
 - Lista da biblioteca com controle de favoritos.
 - Mantida a arquitetura atual de armazenamento e reprodução de arquivos locais/URLs de áudio.
+
+
+## V2.3.0 — Reorganização financeira pessoal
+- Novo controle de dívidas com saldo, status, pagamento diário, registro de pagamentos e saldo restante.
+- Importação opcional do diagnóstico informado pelo usuário (Nubank, Inter, Banco PAN, Parcela Diária e Akio), evitando importação duplicada.
+- Novo registro de renda extra por dia, com faturamento, combustível consumido, reserva de manutenção e horas trabalhadas.
+- Novo checklist de reorganização com missões iniciais e progresso local/nuvem.
+- IndexedDB atualizado para armazenar os novos módulos e sincronizá-los pelo Zyn Cloud.

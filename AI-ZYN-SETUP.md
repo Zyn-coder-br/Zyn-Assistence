@@ -1,4 +1,4 @@
-# Zyn IA — configuração da V2.2.0
+# Zyn IA — configuração da V2.3.0
 
 A V2.2.0 adiciona a primeira camada real de IA do Zyn. O PWA conversa com uma Edge Function do Supabase; a chave da OpenAI fica somente no backend.
 

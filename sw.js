@@ -1,10 +1,10 @@
-const CACHE_NAME = "assistente-zyn-v2.2.3";
+const CACHE_NAME = "assistente-zyn-v2.3.0";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./src/app.js?v=2.2.3",
-  "./src/styles.css?v=2.2.3",
+  "./src/app.js?v=2.3.0",
+  "./src/styles.css?v=2.3.0",
   "./icons/zyn-icon-192-v2.png",
   "./icons/zyn-icon-512-v2.png",
   "./icons/zyn-icon-maskable-v2.png"
