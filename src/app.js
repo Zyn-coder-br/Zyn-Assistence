@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.5.0";
+const APP_VERSION = "2.5.1";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.5.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.5.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -24,14 +24,8 @@ let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 13;
 let db;
-// A última tela é preservada entre recargas; valores desconhecidos voltam para Início.
 const VALID_VIEWS = ["home","planning","reminders","goals","wellness","gym","gymWorkout","food","finance","investments","habits","music","assistant"];
-let currentView = (() => {
-  try {
-    const saved = sessionStorage.getItem("zyn-current-view") || localStorage.getItem("zyn-current-view");
-    return VALID_VIEWS.includes(saved) ? saved : "home";
-  } catch { return "home"; }
-})();
+let currentView = (() => { try { const saved=sessionStorage.getItem("zyn-current-view") || localStorage.getItem("zyn-current-view"); return VALID_VIEWS.includes(saved) ? saved : "home"; } catch { return "home"; } })();
 let financeTab = "overview";
 let planningTab = "today";
 let gymTab = "week";
@@ -402,18 +396,14 @@ function bindAuthGate(){
 // Cada modal é removido do DOM uma única vez; isso evita travamentos e contagem incorreta.
 let activeModalCount=0;
 function closeModal(el){
- // Idempotente: chamadas repetidas pelo botão e pelo fallback global não causam erro.
- if(!el) return;
- if(el.matches?.(".zyn-modal")===false) el=el.closest?.(".zyn-modal")||el;
- if(el.dataset?.zynClosed==="true") return;
- if(!el.classList?.contains("zyn-modal")) return;
+ if(!el || el.dataset.zynClosed==="true") return;
  el.dataset.zynClosed="true";
  if(typeof el._zynKeyHandler==="function"){
   document.removeEventListener("keydown",el._zynKeyHandler);
   el._zynKeyHandler=null;
  }
  el.remove();
- activeModalCount=Math.max(0,document.querySelectorAll(".zyn-modal:not([data-zyn-closed='true'])").length);
+ activeModalCount=Math.max(0,activeModalCount-1);
  document.body.classList.toggle("zyn-modal-open",activeModalCount>0);
  if(activeModalCount===0){
   const last=el._zynPreviousFocus;
@@ -472,14 +462,13 @@ function modal(content,options={}){
  requestAnimationFrame(()=>panel?.querySelector("input,select,textarea,button")?.focus());
  return wrapper;
 }
-// Fallback central: nenhum formulário depende exclusivamente do seu próprio onclick para fechar.
-// Captura os controles de fechar dentro de qualquer modal, inclusive formulários legados.
+// Fallback global de fechamento: executa depois do evento próprio do botão.
 document.addEventListener("click",event=>{
- const button=event.target.closest?.(".zyn-modal [data-modal-close], .zyn-modal button#close, .zyn-modal button#confirmClose, .zyn-modal button[aria-label='Fechar']");
- if(!button) return;
+ const button=event.target.closest?.(".zyn-modal [data-modal-close], .zyn-modal button#close, .zyn-modal button#confirmClose, .zyn-modal button[aria-label='Fechar'], .zyn-modal [data-close-modal]");
+ if(!button)return;
  const wrapper=button.closest(".zyn-modal");
  if(wrapper) closeModal(wrapper);
-},true);
+});
 
 function confirmZyn(message,title="Confirmar ação"){return new Promise(resolve=>{const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">ZYN</span><h2>${esc(title)}</h2><p>${esc(message)}</p></div><button class="icon-btn" id="confirmClose" aria-label="Fechar">${uiIcon("close")}</button></div><div class="actions modal-confirm-actions"><button class="btn" id="confirmNo">Cancelar</button><button class="btn danger" id="confirmYes">Confirmar</button></div>`);const finish=v=>{closeModal(el);resolve(v)};el.querySelector("#confirmClose").onclick=()=>finish(false);el.querySelector("#confirmNo").onclick=()=>finish(false);el.querySelector("#confirmYes").onclick=()=>finish(true);});}
 
@@ -524,12 +513,7 @@ function remove(name,id){return new Promise(async(resolve,reject)=>{
   r.onerror=()=>reject(r.error)
 })}
 
-function setView(view){
- if(!VALID_VIEWS.includes(view)) return;
- currentView=view;
- try{sessionStorage.setItem("zyn-current-view",view);localStorage.setItem("zyn-current-view",view);}catch{}
- render();
-}
+function setView(view){currentView=view;try{sessionStorage.setItem("zyn-current-view",view);localStorage.setItem("zyn-current-view",view);}catch{}render()}
 
 function store(name,mode="readonly"){return db.transaction(name,mode).objectStore(name)}
 
@@ -1386,31 +1370,13 @@ window.addEventListener("appinstalled", ()=>{
  const b=document.querySelector("#installBtn"); if(b) b.hidden=true;
  toast("Assistente Zyn instalado");
 });
-// Salva a posição atual para que uma recarga não leve o usuário de volta ao topo.
+// Guarda a seção atual e a posição de rolagem antes de recarregar.
 let zynScrollSaveQueued=false;
-function saveAppPosition(){
- try{
-  sessionStorage.setItem("zyn-scroll-y",String(Math.max(0,window.scrollY||window.pageYOffset||0)));
-  sessionStorage.setItem("zyn-current-view",currentView);
-  localStorage.setItem("zyn-current-view",currentView);
- }catch{}
-}
-window.addEventListener("scroll",()=>{
- if(zynScrollSaveQueued)return;
- zynScrollSaveQueued=true;
- requestAnimationFrame(()=>{zynScrollSaveQueued=false;saveAppPosition();});
-},{passive:true});
+function saveAppPosition(){try{sessionStorage.setItem("zyn-scroll-y",String(Math.max(0,window.scrollY||window.pageYOffset||0)));sessionStorage.setItem("zyn-current-view",currentView);localStorage.setItem("zyn-current-view",currentView);}catch{}}
+window.addEventListener("scroll",()=>{if(zynScrollSaveQueued)return;zynScrollSaveQueued=true;requestAnimationFrame(()=>{zynScrollSaveQueued=false;saveAppPosition();});},{passive:true});
 window.addEventListener("pagehide",saveAppPosition);
 window.addEventListener("beforeunload",saveAppPosition);
-function restoreAppPosition(){
- let y=0;
- try{y=Math.max(0,Number(sessionStorage.getItem("zyn-scroll-y")||0));}catch{}
- requestAnimationFrame(()=>requestAnimationFrame(()=>{
-  window.scrollTo(0,y);
-  // Layouts com listas carregadas depois do primeiro frame podem alterar a altura da página.
-  setTimeout(()=>window.scrollTo(0,y),180);
- }));
-}
+function restoreAppPosition(){let y=0;try{y=Math.max(0,Number(sessionStorage.getItem("zyn-scroll-y")||0));}catch{}requestAnimationFrame(()=>requestAnimationFrame(()=>{window.scrollTo(0,y);setTimeout(()=>window.scrollTo(0,y),250);}));}
 
 (async()=>{
  try{
