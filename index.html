@@ -1,6 +1,8 @@
 <!doctype html>
+<!-- Zyn Assistente | HTML principal. Aqui ficam metadados e os arquivos CSS/JS. -->
 <html lang="pt-BR">
 <head>
+  <!-- 1. Configurações da página e do PWA -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#7465c9" />
@@ -9,11 +11,18 @@
   <link rel="icon" href="./icons/zyn-icon-192-v2.png" type="image/png" />
   <link rel="apple-touch-icon" href="./icons/zyn-icon-192-v2.png" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <link rel="stylesheet" href="./src/styles.css?v=2.3.0" />
+  <link rel="stylesheet" href="./css/styles.css?v=2.5.0" />
   <title>Zyn Assistente</title>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="./src/app.js?v=2.3.0"></script>
+  <!--
+    2. Ponto de montagem do aplicativo.
+    O JavaScript cria as telas dentro desta área; isso é normal em uma PWA.
+    A estrutura e o comportamento ficam separados: HTML (aqui), CSS (css/styles.css), JS (js/app.js).
+  -->
+  <div id="app" aria-live="polite"></div>
+
+  <!-- 3. Lógica do aplicativo: navegação, dados, formulários e eventos. -->
+  <script type="module" src="./js/app.js?v=2.5.0"></script>
 </body>
 </html>
