@@ -1,19 +1,37 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.3.0";
+const APP_VERSION = "2.5.0";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.3.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.5.0", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
 let cloudStatus = "offline";
 let cloudMessage = "Entre na sua conta para sincronizar";
+/*
+ * GUIA DO ARQUIVO app.js
+ * 1) Configurações e estado do aplicativo
+ * 2) Banco local (IndexedDB) e sincronização
+ * 3) Funções utilitárias (datas, moeda, ícones, notificações)
+ * 4) Modais e formulários (inclui closeModal/modal)
+ * 5) Telas de cada módulo (Início, Planejar, Finanças, Bem Estar, Música etc.)
+ * 6) Eventos dos botões e inicialização
+ * Dica: pesquise pelo nome do botão/ID (ex.: financeDebtForm) para achar sua ação.
+ */
+
 const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 13;
 let db;
-let currentView = "home";
+// A última tela é preservada entre recargas; valores desconhecidos voltam para Início.
+const VALID_VIEWS = ["home","planning","reminders","goals","wellness","gym","gymWorkout","food","finance","investments","habits","music","assistant"];
+let currentView = (() => {
+  try {
+    const saved = sessionStorage.getItem("zyn-current-view") || localStorage.getItem("zyn-current-view");
+    return VALID_VIEWS.includes(saved) ? saved : "home";
+  } catch { return "home"; }
+})();
 let financeTab = "overview";
 let planningTab = "today";
 let gymTab = "week";
@@ -277,6 +295,7 @@ async function addMusicTrack(track,playlistId=null){
   if(playlistId){const pl=musicPlaylists.find(p=>String(p.id)===String(playlistId));if(pl){pl.trackIds=[...(pl.trackIds||[]),added.id];await put("musicPlaylists",pl);await loadData();}}
   return true;
 }
+/* ===== MÓDULO: MÚSICA — playlists, biblioteca e reprodução ===== */
 function musicPlaylistForm(existing={}){const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">MÚSICA</span><h2>${existing.id?"Editar":"Nova"} playlist</h2><p>Organize suas músicas do jeito que preferir.</p></div><button class="icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="playlistForm" class="stack"><div class="field"><label>Nome da playlist *</label><input name="name" required value="${esc(existing.name||"")}" placeholder="Ex.: Treino, Relax, Foco"></div><button class="btn primary">Salvar playlist</button></form>`);el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#playlistForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await createMusicPlaylist(String(f.get("name")||"").trim());closeModal(el)};}
 async function createMusicPlaylist(name){const clean=String(name||"").trim();if(!clean)return;await put("musicPlaylists",{name:clean,trackIds:[],createdAt:new Date().toISOString()});await loadData();render();toast("Playlist: Playlist criada");}
 function updateMusicUI(){const track=currentMusicTrack(),title=document.querySelector("#musicNowTitle"),artist=document.querySelector("#musicNowArtist"),cover=document.querySelector("#musicNowCover"),play=document.querySelector("#musicPlayBtn"),playing=!!(musicAudio&&!musicAudio.paused);if(title)title.textContent=track?.title||"Sua próxima trilha começa aqui";if(artist)artist.textContent=track?.artist||"Adicione arquivos de áudio à sua biblioteca";if(cover&&track?.cover&&cover.tagName==="IMG")cover.src=track.cover;if(cover&&!track?.cover&&cover.tagName==="IMG"){const ph=document.createElement("div");ph.id="musicNowCover";ph.className="music-cover-placeholder";ph.innerHTML=uiIcon("music");cover.replaceWith(ph);}if(play){play.innerHTML=uiIcon(playing?"pause":"playCircle");play.setAttribute("aria-label",playing?"Pausar":"Reproduzir");play.title=playing?"Pausar":"Reproduzir";}document.querySelector(".zyn-disc-wrap")?.classList.toggle("is-playing",playing);const status=document.querySelector("#musicStatus");if(status)status.textContent=track?.source==="local"?"ARQUIVO LOCAL":track?.url?"ÁUDIO ONLINE":"AGUARDANDO MÚSICA";const fav=document.querySelector("#musicFavoriteCurrent");if(fav)fav.classList.toggle("is-favorite",!!track?.favorite);}
@@ -379,8 +398,28 @@ function bindAuthGate(){
   });
 }
 
+// MODAIS — controle central de abertura/fechamento de janelas.
+// Cada modal é removido do DOM uma única vez; isso evita travamentos e contagem incorreta.
 let activeModalCount=0;
-function closeModal(el){if(!el)return;closeModal(el);activeModalCount=Math.max(0,activeModalCount-1);document.body.classList.toggle("zyn-modal-open",activeModalCount>0)}
+function closeModal(el){
+ // Idempotente: chamadas repetidas pelo botão e pelo fallback global não causam erro.
+ if(!el) return;
+ if(el.matches?.(".zyn-modal")===false) el=el.closest?.(".zyn-modal")||el;
+ if(el.dataset?.zynClosed==="true") return;
+ if(!el.classList?.contains("zyn-modal")) return;
+ el.dataset.zynClosed="true";
+ if(typeof el._zynKeyHandler==="function"){
+  document.removeEventListener("keydown",el._zynKeyHandler);
+  el._zynKeyHandler=null;
+ }
+ el.remove();
+ activeModalCount=Math.max(0,document.querySelectorAll(".zyn-modal:not([data-zyn-closed='true'])").length);
+ document.body.classList.toggle("zyn-modal-open",activeModalCount>0);
+ if(activeModalCount===0){
+  const last=el._zynPreviousFocus;
+  if(last && typeof last.focus==="function" && document.contains(last)) last.focus();
+ }
+}
 
 function localDateKey(date=new Date()){const y=date.getFullYear();const m=String(date.getMonth()+1).padStart(2,"0");const d=String(date.getDate()).padStart(2,"0");return `${y}-${m}-${d}`}
 function dateKey(date){return localDateKey(date)}
@@ -411,23 +450,44 @@ function goalsView(){
 }
 
 function modal(content,options={}){
- const wrapper=document.createElement("div");wrapper.className="modal-backdrop zyn-modal";wrapper.dataset.zynModal="true";
+ const wrapper=document.createElement("div");
+ wrapper.className="modal-backdrop zyn-modal";
+ wrapper.dataset.zynModal="true";
+ wrapper._zynPreviousFocus=document.activeElement;
  wrapper.innerHTML=`<div class="modal" role="dialog" aria-modal="true">${content}</div>`;
- document.body.appendChild(wrapper);activeModalCount++;document.body.classList.add("zyn-modal-open");
+ document.body.appendChild(wrapper);
+ activeModalCount++;
+ document.body.classList.add("zyn-modal-open");
  const panel=wrapper.querySelector(".modal");
- wrapper.addEventListener("click",e=>{if(e.target===wrapper && options.closeOnBackdrop!==false)closeModal(wrapper)});
- const onKey=e=>{if(e.key==="Escape" && options.closeOnEscape!==false){closeModal(wrapper);document.removeEventListener("keydown",onKey)}};
- document.addEventListener("keydown",onKey);
- wrapper.addEventListener("remove",()=>document.removeEventListener("keydown",onKey),{once:true});
+ wrapper.addEventListener("click",e=>{
+  if(e.target===wrapper && options.closeOnBackdrop!==false) closeModal(wrapper);
+ });
+ // Só a janela mais recente reage ao Escape, evitando fechar vários modais em cascata.
+ wrapper._zynKeyHandler=e=>{
+  if(e.key!=="Escape" || options.closeOnEscape===false) return;
+  const openModals=[...document.querySelectorAll(".zyn-modal:not([data-zyn-closed='true'])")];
+  if(openModals[openModals.length-1]===wrapper) closeModal(wrapper);
+ };
+ document.addEventListener("keydown",wrapper._zynKeyHandler);
  requestAnimationFrame(()=>panel?.querySelector("input,select,textarea,button")?.focus());
- return wrapper
+ return wrapper;
 }
+// Fallback central: nenhum formulário depende exclusivamente do seu próprio onclick para fechar.
+// Captura os controles de fechar dentro de qualquer modal, inclusive formulários legados.
+document.addEventListener("click",event=>{
+ const button=event.target.closest?.(".zyn-modal [data-modal-close], .zyn-modal button#close, .zyn-modal button#confirmClose, .zyn-modal button[aria-label='Fechar']");
+ if(!button) return;
+ const wrapper=button.closest(".zyn-modal");
+ if(wrapper) closeModal(wrapper);
+},true);
+
 function confirmZyn(message,title="Confirmar ação"){return new Promise(resolve=>{const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">ZYN</span><h2>${esc(title)}</h2><p>${esc(message)}</p></div><button class="icon-btn" id="confirmClose" aria-label="Fechar">${uiIcon("close")}</button></div><div class="actions modal-confirm-actions"><button class="btn" id="confirmNo">Cancelar</button><button class="btn danger" id="confirmYes">Confirmar</button></div>`);const finish=v=>{closeModal(el);resolve(v)};el.querySelector("#confirmClose").onclick=()=>finish(false);el.querySelector("#confirmNo").onclick=()=>finish(false);el.querySelector("#confirmYes").onclick=()=>finish(true);});}
 
 function money(value){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(value)||0)}
 
 function monthKey(date=todayISO()){ return String(date).slice(0,7); }
 
+/* ===== BANCO LOCAL: IndexedDB, leitura, gravação e exclusão ===== */
 function openDB(){
   return new Promise((resolve,reject)=>{
     const request=indexedDB.open(DB_NAME,DB_VERSION);
@@ -449,6 +509,7 @@ function put(name,data,options={}){return new Promise((resolve,reject)=>{
   r.onsuccess=()=>{if(options.touch!==false && typeof scheduleSync==="function")scheduleSync();resolve(r.result)};r.onerror=()=>reject(r.error)
 })}
 
+/* ===== MÓDULO: PLANEJAR — lembretes, eventos e metas de rotina ===== */
 function remindersView(){
  return `<div class="section-title"><h2>Lembretes</h2><button class="btn primary" id="newReminder">${uiIcon("calendar")} Novo</button></div><div class="stack">${reminders.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(r=>`<div class="list-item ${r.done?"done":""}"><div><b>${esc(r.title)}</b><div class="muted">${esc(r.category||"Geral")} • ${fmtDate(r.date)}${r.time?" • "+esc(r.time):""}</div>${r.notes?`<div class="muted">${esc(r.notes)}</div>`:""}</div><div class="actions"><button class="btn" data-reminder-done="${r.id}">${r.done?uiIcon("undo"):uiIcon("check")}</button><button class="btn" data-reminder-edit="${r.id}">${uiIcon("edit")}</button><button class="btn danger" data-reminder-delete="${r.id}">${uiIcon("trash")}</button></div></div>`).join("")||`<div class="empty">Você ainda não cadastrou lembretes.</div>`}</div>`;
 }
@@ -463,7 +524,12 @@ function remove(name,id){return new Promise(async(resolve,reject)=>{
   r.onerror=()=>reject(r.error)
 })}
 
-function setView(view){currentView=view;render()}
+function setView(view){
+ if(!VALID_VIEWS.includes(view)) return;
+ currentView=view;
+ try{sessionStorage.setItem("zyn-current-view",view);localStorage.setItem("zyn-current-view",view);}catch{}
+ render();
+}
 
 function store(name,mode="readonly"){return db.transaction(name,mode).objectStore(name)}
 
@@ -471,7 +537,7 @@ function toast(message){const el=document.createElement("div");el.textContent=me
 
 function todayISO(){return localDateKey(new Date())}
 
-function toggleTheme(){theme=theme==="light"?"dark":"light";localStorage.setItem("zyn-theme",theme);document.body.className=theme;render()}
+function toggleTheme(){theme=theme==="light"?"dark":"light";localStorage.setItem("zyn-theme",theme);document.body.classList.remove("light","dark");document.body.classList.add(theme);render()}
 
 function uiIcon(name){const paths={
  home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',
@@ -546,6 +612,7 @@ function gymToday(){const d=new Date().getDay();return gymWeek().find(x=>x.day==
 function gymCount(){const ds=getCurrentWeekDays();return gymSessions.filter(x=>ds.includes(x.date)).length}
 function gymGoal(){return gymProfile?.goal==="mass"?"Ganhar massa":gymProfile?.goal==="maintain"?"Manter":"Perder gordura"}
 function gymExercises(plan){return Array.isArray(plan?.exercises)&&plan.exercises.length?plan.exercises:(GYM_EX[plan?.workout]||GYM_EX["Cardio / treino opcional"])}
+/* ===== MÓDULO: BEM-ESTAR — treino, academia e atividade física ===== */
 function gymDayForm(day){
  const plan=gymWeek().find(x=>x.day===Number(day))||DEFAULT_GYM.find(x=>x.day===Number(day));
  const exercises=gymExercises(plan);
@@ -642,6 +709,7 @@ async function ensureFoodTodayDefaults(){
  }
  localStorage.setItem(key,"1");
 }
+/* ===== MÓDULO: DIETAS — refeições, alimentos e lista de compras ===== */
 function foodEditForm(existing={},day=foodDayName()){
  const el=modal(`<div class="row"><div><span class="eyebrow">DIETA</span><h2>${existing.id?"Editar":"Nova"} refeição</h2></div><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="foodMealForm" class="stack"><div class="form-grid"><div class="field"><label>Dia</label><select name="day">${FOOD_DAYS.map(d=>`<option ${d===day?'selected':''}>${d}</option>`).join("")}</select></div><div class="field"><label>Refeição</label><input name="slot" required value="${esc(existing.slot||"")}" placeholder="Ex.: Café da manhã"></div><div class="field full"><label>Alimentos</label><input name="items" required value="${esc(existing.items||"")}" placeholder="Ex.: ovos + pão + fruta"></div><div class="field"><label>Categoria</label><input name="tag" value="${esc(existing.tag||"Prático")}" placeholder="Prático"></div></div><div class="actions"><button class="btn primary">Salvar refeição</button>${existing.id?`<button type="button" class="btn danger" id="deleteMealModal">${uiIcon("trash")} Excluir</button>`:""}</div></form>`);
  el.querySelector('#close').onclick=()=>closeModal(el);
@@ -857,6 +925,7 @@ function investmentSummary(){
 function investmentTypeLabel(type){
  return ({stock:"Ações",fii:"FIIs",etf:"ETFs",fixed:"Renda fixa",crypto:"Cripto",other:"Outros"})[type]||"Outros";
 }
+/* ===== MÓDULO: INVESTIMENTOS — cadastro e acompanhamento ===== */
 function investmentForm(existing={}){
  const el=modal(`<div class="row"><div><span class="eyebrow">CARTEIRA</span><h2 style="margin:3px 0">${existing.id?"Editar ativo":"Novo investimento"}</h2></div><button class="btn" id="closeInvestment">×</button></div>
  <form id="investmentForm" class="stack"><div class="form-grid">
@@ -900,6 +969,7 @@ function financeCardsView(){const cards=financeAccounts.filter(c=>c.type==="card
 function financeExpensesView(){const key=financeProfile?.selectedMonth||monthKey(),d=financeMonthData(key),cats=financeCategoryTotals(key);return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("chart")} Gastos por categoria</h3><span>${esc(financeMonthLabel(key))}</span></div><div class="actions"><button class="btn" id="financeMonth">${uiIcon("calendar")} ${esc(financeMonthLabel(key))}</button><button class="btn primary" id="financeAdd">+ Gasto</button></div></div>${cats.length?`<div class="category-list">${cats.map(([c,v])=>`<div class="category-row"><div><b>${esc(c)}</b><span>${money(v)}</span></div><div class="progress"><div style="width:${d.expense?Math.min(100,v/d.expense*100):0}%"></div></div></div>`).join('')}</div>`:'<div class="empty">Nenhuma despesa registrada neste mês.</div>'}</section><section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("receipt")} Lançamentos</h3><span>${d.tx.length} registro(s)</span></div><button class="btn" id="financeAddIncome">+ Entrada</button></div><div class="modern-list">${d.tx.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(x=>`<div class="modern-list-row finance-tx-row" data-fin-tx-open="${x.id}" role="button" tabindex="0"><div class="row-icon">${x.type==='expense'?'−':x.type==='saving'?'◈':'＋'}</div><div class="row-main"><b>${esc(x.description)}</b><span>${esc(x.category||'Outros')} • ${fmtDate(x.date)} • ${esc(x.account||'')}</span></div><strong class="${x.type==='expense'?'negative':'positive'}">${x.type==='expense'?'−':'+'}${money(x.amount)}</strong><div class="actions"><button class="btn" data-fin-tx-edit="${x.id}">Editar</button><button class="btn danger" data-fin-tx-delete="${x.id}">×</button></div></div>`).join('')||'<div class="empty">Nenhum lançamento neste mês.</div>'}</div></section>`;}
 
 function financeGoalsView(){return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("goal")} Metas financeiras</h3><span>Objetivos para organizar seu dinheiro</span></div><button class="btn primary" id="financeGoalAdd">+ Nova meta</button></div><div class="modern-list">${financeGoals.map(g=>{const current=Number(g.current||0),target=Number(g.target||0),pct=target?Math.min(100,current/target*100):0;return `<div class="finance-goal-item"><div class="row"><div class="row-main"><b>${esc(g.name||"Meta")}</b><span>${money(current)} de ${money(target)}</span></div><span>${pct.toFixed(0)}%</span></div><div class="progress"><div style="width:${pct}%"></div></div><div class="actions"><button class="btn" data-fin-goal-edit="${g.id}">Editar</button><button class="btn danger" data-fin-goal-delete="${g.id}">Excluir</button></div></div>`}).join("")||'<div class="empty">Crie uma meta financeira, como reserva de emergência ou viagem.</div>'}</div></section>`;}
+/* ===== MÓDULO: FINANÇAS — saldo, cartões, contas, metas e transações ===== */
 function financeCashForm(){const current=Number(financeProfile?.cashBalance||0);const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">FINANÇAS</span><h2>Saldo em dinheiro</h2><p>Defina quanto dinheiro físico está disponível.</p></div><button class="icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="financeCashForm" class="stack"><div class="field"><label>Saldo disponível (R$)</label><input name="balance" type="number" min="0" step=".01" value="${current.toFixed(2)}"></div><p class="muted">Movimentações escolhendo “Dinheiro” serão somadas ou descontadas deste saldo.</p><button class="btn primary">Salvar saldo</button></form>`);el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#financeCashForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);financeProfile={...(financeProfile||{id:1}),cashBalance:Number(f.get("balance")||0)};await put("financeProfile",financeProfile);closeModal(el);await loadData();render();toast("Saldo em dinheiro atualizado")};}
 function financeBalanceAccounts(){const cash=Number(financeProfile?.cashBalance||0);const cards=financeAccounts.filter(a=>a.type==="card");return {cash,cards,total:cash+cards.reduce((s,a)=>s+Number(a.balance||0),0)};}
 function financeCardForm(existing={}){const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">FINANÇAS</span><h2>${existing.id?"Editar":"Adicionar"} cartão</h2><p>Use o cartão como uma conta de débito com saldo disponível.</p></div><button class="icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div><form id="financeCardForm" class="stack"><div class="form-grid"><div class="field full"><label>Nome *</label><input name="name" required value="${esc(existing.name||"")}" placeholder="Ex.: Nubank"></div><div class="field"><label>Últimos 4 dígitos</label><input name="last4" maxlength="4" value="${esc(existing.last4||"")}" placeholder="4582"></div><div class="field"><label>Saldo disponível (R$)</label><input name="balance" type="number" min="0" step=".01" value="${existing.balance??Math.max(0,Number(existing.limit||0)-Number(existing.used||0))}"></div></div><button class="btn primary">Salvar cartão</button></form>`);el.querySelector("#close").onclick=()=>closeModal(el);el.querySelector("#financeCardForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put("financeAccounts",{...(existing.id?existing:{}),name:String(f.get("name")||"").trim(),last4:String(f.get("last4")||""),balance:Number(f.get("balance")||0),type:"card"});closeModal(el);await loadData();render();toast("Cartão salvo")};}
@@ -913,6 +983,7 @@ function financeDebtsView(){
  <p class="muted">Registre saldos confirmados pelo credor. O Zyn só reduz o saldo quando você registra um pagamento; juros, multas e acordos devem ser atualizados conforme a informação real do credor.</p>
  <div class="modern-list">${financeDebts.slice().sort((a,b)=>Number(b.balance||0)-Number(a.balance||0)).map(d=>`<div class="modern-list-row"><div class="row-icon">${uiIcon("receipt")}</div><div class="row-main"><b>${esc(d.name||"Credor")}</b><span>${esc(d.status||"A verificar")}${Number(d.dailyPayment||0)>0?` • pagamento informado ${money(d.dailyPayment)}/dia`:""}${d.notes?` • ${esc(d.notes)}`:""}</span><small>Saldo cadastrado: ${money(d.balance||0)}</small></div><div class="actions"><button class="btn primary" data-debt-pay="${d.id}">Registrar pagamento</button><button class="btn" data-debt-edit="${d.id}">Editar</button><button class="btn danger" data-debt-delete="${d.id}">×</button></div></div>`).join("")||'<div class="empty">Cadastre suas dívidas ou importe o diagnóstico informado na conversa.</div>'}</div></section>`;
 }
+/* FINANÇAS / DÍVIDAS: cadastro, edição e saldo devedor. */
 function financeDebtForm(existing={}){
  const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">FINANÇAS</span><h2>${existing.id?"Editar dívida":"Cadastrar dívida"}</h2><p>Use o saldo atual informado pelo credor. Valores aproximados podem ser marcados nas observações.</p></div><button class="icon-btn" id="debtClose">${uiIcon("close")}</button></div><form id="financeDebtForm" class="stack"><div class="form-grid"><div class="field full"><label>Credor *</label><input name="name" required value="${esc(existing.name||"")}" placeholder="Ex.: Nubank, empréstimo familiar"></div><div class="field"><label>Saldo atual (R$) *</label><input name="balance" type="number" min="0" step=".01" required value="${existing.balance??""}"></div><div class="field"><label>Pagamento diário (R$)</label><input name="dailyPayment" type="number" min="0" step=".01" value="${existing.dailyPayment??0}"></div><div class="field"><label>Situação</label><select name="status"><option ${existing.status==="Atrasada"?"selected":""}>Atrasada</option><option ${existing.status==="Em negociação"?"selected":""}>Em negociação</option><option ${existing.status==="Em dia"?"selected":""}>Em dia</option><option ${existing.status==="A verificar"||!existing.status?"selected":""}>A verificar</option><option ${existing.status==="Quitada"?"selected":""}>Quitada</option></select></div><div class="field"><label>Vencimento próximo</label><input name="dueDate" type="date" value="${esc(existing.dueDate||"")}"></div><div class="field full"><label>Observações</label><textarea name="notes" rows="2" placeholder="Ex.: saldo aproximado; confirmar juros e condições">${esc(existing.notes||"")}</textarea></div></div><button class="btn primary">Salvar dívida</button></form>`);
  el.querySelector('#debtClose').onclick=()=>closeModal(el);el.querySelector('#financeDebtForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const data={...(existing.id?existing:{}),name:String(f.get('name')||'').trim(),balance:Number(f.get('balance')||0),dailyPayment:Number(f.get('dailyPayment')||0),status:String(f.get('status')||'A verificar'),dueDate:String(f.get('dueDate')||''),notes:String(f.get('notes')||'').trim(),payments:existing.payments||[]};await put('financeDebts',data);closeModal(el);await loadData();render();toast('Dívida salva')};
@@ -922,6 +993,7 @@ function financeDebtPaymentForm(debt){
  el.querySelector('#debtPayClose').onclick=()=>closeModal(el);el.querySelector('#debtPayForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),amount=Number(f.get('amount')||0);if(amount<=0||amount>Number(debt.balance||0))return toast('Confira o valor e o saldo da dívida.');const updated={...debt,balance:Math.max(0,Number(debt.balance||0)-amount),status:Math.max(0,Number(debt.balance||0)-amount)<0.01?'Quitada':debt.status,payments:[...(debt.payments||[]),{amount,date:String(f.get('date')||todayISO()),notes:String(f.get('notes')||'').trim()}]};await put('financeDebts',updated);closeModal(el);await loadData();render();toast('Pagamento registrado; confirme se o credor abateu o valor do saldo.')};
 }
 function rideLogsView(){const gross=rideLogs.reduce((s,r)=>s+Number(r.gross||0),0),fuel=rideLogs.reduce((s,r)=>s+Number(r.fuel||0),0),reserve=rideLogs.reduce((s,r)=>s+Number(r.maintenance||0),0),net=gross-fuel-reserve;return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("bike")} Renda extra — aplicativo</h3><span>Registre faturamento, combustível e horas reais</span></div><button class="btn primary" id="rideAdd">+ Registrar dia</button></div><div class="stat-grid four"><div class="stat-card"><span>Faturamento</span><b>${money(gross)}</b></div><div class="stat-card"><span>Combustível</span><b>${money(fuel)}</b></div><div class="stat-card"><span>Reserva manutenção</span><b>${money(reserve)}</b></div><div class="stat-card"><span>Após custos registrados</span><b>${money(net)}</b></div></div><p class="muted">Esse saldo é uma estimativa e não é automaticamente considerado dinheiro livre: ainda pode haver outros custos e contas essenciais.</p><div class="modern-list">${rideLogs.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(r=>`<div class="modern-list-row"><div class="row-icon">${uiIcon("bike")}</div><div class="row-main"><b>${esc(r.label||"Corridas por aplicativo")} • ${fmtDate(r.date)}</b><span>${Number(r.hours||0)>0?`${Number(r.hours)} hora(s) • `:""}Combustível ${money(r.fuel||0)} • Manutenção ${money(r.maintenance||0)}</span></div><div class="asset-number"><b>${money(r.gross||0)}</b><span>líquido estimado ${money(Number(r.gross||0)-Number(r.fuel||0)-Number(r.maintenance||0))}</span></div><div class="actions"><button class="btn" data-ride-edit="${r.id}">Editar</button><button class="btn danger" data-ride-delete="${r.id}">×</button></div></div>`).join("")||'<div class="empty">Registre os dias de corrida para calcular sua renda extra real.</div>'}</div></section>`}
+/* FINANÇAS / RENDA EXTRA: faturamento, combustível e reserva de manutenção. */
 function rideLogForm(existing={}){const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">RENDA EXTRA</span><h2>${existing.id?"Editar dia":"Registrar dia de aplicativo"}</h2></div><button class="icon-btn" id="rideClose">${uiIcon("close")}</button></div><form id="rideForm" class="stack"><div class="form-grid"><div class="field full"><label>Descrição</label><input name="label" value="${esc(existing.label||"Corridas por aplicativo")}"></div><div class="field"><label>Data</label><input name="date" type="date" required value="${existing.date||todayISO()}"></div><div class="field"><label>Faturamento (R$) *</label><input name="gross" type="number" min="0" step=".01" required value="${existing.gross??""}"></div><div class="field"><label>Combustível consumido (R$)</label><input name="fuel" type="number" min="0" step=".01" value="${existing.fuel??0}"></div><div class="field"><label>Reserva manutenção (R$)</label><input name="maintenance" type="number" min="0" step=".01" value="${existing.maintenance??0}"></div><div class="field"><label>Horas trabalhadas</label><input name="hours" type="number" min="0" step=".25" value="${existing.hours??""}"></div><div class="field full"><label>Observações</label><input name="notes" value="${esc(existing.notes||"")}" placeholder="Opcional"></div></div><button class="btn primary">Salvar registro</button></form>`);el.querySelector('#rideClose').onclick=()=>closeModal(el);el.querySelector('#rideForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await put('rideLogs',{...(existing.id?existing:{}),label:String(f.get('label')||'Corridas por aplicativo').trim(),date:f.get('date')||todayISO(),gross:Number(f.get('gross')||0),fuel:Number(f.get('fuel')||0),maintenance:Number(f.get('maintenance')||0),hours:Number(f.get('hours')||0),notes:String(f.get('notes')||'').trim()});closeModal(el);await loadData();render();toast('Renda extra registrada')};}
 function recoveryPlanView(){const defaults=[{title:'Confirmar renda em dinheiro e benefício',detail:'Manter salário em dinheiro separado do cartão alimentação.',category:'Finanças'},{title:'Levantar todas as dívidas',detail:'Confirmar saldo, atraso, juros, credor e condições de pagamento.',category:'Finanças'},{title:'Proteger despesas essenciais até o próximo pagamento',detail:'Aluguel, alimentação, pensão, contas e transporte necessário.',category:'Organização'},{title:'Registrar cada dia de aplicativo',detail:'Anotar faturamento, combustível consumido e horas trabalhadas.',category:'Renda extra'},{title:'Revisar o plano no fim da semana',detail:'Escolher o próximo passo sem criar metas impossíveis.',category:'Revisão'}];return `<section class="panel-card"><div class="panel-heading"><div><h3>${uiIcon("target")} Plano de reorganização</h3><span>Pequenas missões para recuperar o controle, sem exigir perfeição</span></div>${recoveryTasks.length?'<button class="btn" id="resetRecoveryTasks">Recriar missões</button>':'<button class="btn primary" id="createRecoveryTasks">Criar minhas missões</button>'}</div>${recoveryTasks.length?`<div class="modern-list">${recoveryTasks.map(t=>`<label class="modern-list-row" style="cursor:pointer"><input type="checkbox" data-recovery-task="${t.id}" ${t.done?'checked':''} style="width:20px;height:20px;accent-color:var(--primary)"><div class="row-main"><b style="${t.done?'text-decoration:line-through;opacity:.7':''}">${esc(t.title)}</b><span>${esc(t.detail||'')}</span><small>${esc(t.category||'Missão pessoal')}</small></div></label>`).join('')}</div><p class="muted">${recoveryTasks.filter(t=>t.done).length} de ${recoveryTasks.length} missões concluídas. Você pode concluir em dias diferentes; não é necessário fazer tudo hoje.</p>`:'<div class="empty">Vamos criar cinco missões iniciais para organizar as informações e decidir os próximos passos. Elas não criam pagamentos nem alteram suas contas.</div>'}</section>`}
 async function seedRecoveryTasks(){const defaults=[{title:'Confirmar renda em dinheiro e benefício',detail:'Manter salário em dinheiro separado do cartão alimentação.',category:'Finanças'},{title:'Levantar todas as dívidas',detail:'Confirmar saldo, atraso, juros, credor e condições de pagamento.',category:'Finanças'},{title:'Proteger despesas essenciais até o próximo pagamento',detail:'Aluguel, alimentação, pensão, contas e transporte necessário.',category:'Organização'},{title:'Registrar cada dia de aplicativo',detail:'Anotar faturamento, combustível consumido e horas trabalhadas.',category:'Renda extra'},{title:'Revisar o plano no fim da semana',detail:'Escolher o próximo passo sem criar metas impossíveis.',category:'Revisão'}];for(const t of defaults)await put('recoveryTasks',{...t,done:false});await loadData();render()}
@@ -1036,6 +1108,7 @@ async function refreshAuth(){const {data,error}=await supabase.auth.getSession()
 async function signIn(email,password){const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error) throw error;authSession=data.session;if(!authSession) throw new Error("Não foi possível iniciar a sessão.");markAppUnlocked();await syncAll("login");render();toast("Nuvem: Conta conectada e dados sincronizados");}
 async function signUp(email,password){const {data,error}=await supabase.auth.signUp({email,password});if(error) throw error;authSession=data.session||null;if(data.session){markAppUnlocked();await syncAll("signup");render();toast("Nuvem: Conta criada e sincronizada");}else{toast("Conta criada. Confira seu e-mail para confirmar o cadastro.");}}
 async function signOut(){await supabase.auth.signOut();authSession=null;lockApp();setCloudStatus("offline","Sessão encerrada — entre novamente para acessar o Zyn");render();toast("Você saiu da conta. Seus dados locais foram preservados.");}
+/* ===== ACESSO E NUVEM — login, conta e sincronização Supabase ===== */
 function authForm(){
  const user=currentUser();
  const el=modal(`<div class="row"><h2>Nuvem: Zyn Cloud</h2><button class="btn icon-btn" id="close" aria-label="Fechar">${uiIcon("close")}</button></div>
@@ -1290,8 +1363,12 @@ function bind(){
 }
 document.addEventListener("click",e=>{if(!moreMenuOpen)return;if(e.target.closest("#morePopover")||e.target.closest("#moreFab"))return;closeMoreMenu();});
 
+/* ===== RENDERIZAÇÃO — escolhe a tela e atualiza o conteúdo principal ===== */
 function render(){
- document.body.className=theme;
+ document.body.classList.remove("light","dark");
+ document.body.classList.add(theme);
+ document.body.classList.toggle("zyn-modal-open",document.querySelectorAll(".zyn-modal:not([data-zyn-closed='true'])").length>0);
+ try{sessionStorage.setItem("zyn-current-view",currentView);localStorage.setItem("zyn-current-view",currentView);}catch{}
  if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}
  const persistentDock=document.querySelector("#musicDock");
  app.innerHTML=layout();
@@ -1309,6 +1386,32 @@ window.addEventListener("appinstalled", ()=>{
  const b=document.querySelector("#installBtn"); if(b) b.hidden=true;
  toast("Assistente Zyn instalado");
 });
+// Salva a posição atual para que uma recarga não leve o usuário de volta ao topo.
+let zynScrollSaveQueued=false;
+function saveAppPosition(){
+ try{
+  sessionStorage.setItem("zyn-scroll-y",String(Math.max(0,window.scrollY||window.pageYOffset||0)));
+  sessionStorage.setItem("zyn-current-view",currentView);
+  localStorage.setItem("zyn-current-view",currentView);
+ }catch{}
+}
+window.addEventListener("scroll",()=>{
+ if(zynScrollSaveQueued)return;
+ zynScrollSaveQueued=true;
+ requestAnimationFrame(()=>{zynScrollSaveQueued=false;saveAppPosition();});
+},{passive:true});
+window.addEventListener("pagehide",saveAppPosition);
+window.addEventListener("beforeunload",saveAppPosition);
+function restoreAppPosition(){
+ let y=0;
+ try{y=Math.max(0,Number(sessionStorage.getItem("zyn-scroll-y")||0));}catch{}
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  window.scrollTo(0,y);
+  // Layouts com listas carregadas depois do primeiro frame podem alterar a altura da página.
+  setTimeout(()=>window.scrollTo(0,y),180);
+ }));
+}
+
 (async()=>{
  try{
    await openDB();
@@ -1324,6 +1427,7 @@ window.addEventListener("appinstalled", ()=>{
      }catch(e){console.warn("[Zyn] Service Worker:",e);}
    }
    render();
+   restoreAppPosition();
    if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
  }catch(error){
    console.error("[Zyn] Falha na inicialização:",error);
