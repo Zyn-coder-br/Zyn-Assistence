@@ -1,10 +1,10 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const APP_VERSION = "2.5.1";
+const APP_VERSION = "2.4.1";
 const SUPABASE_URL = "https://gjijbavsknxmzwilojnp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g9_bCMdiuHGjU1ksuby0aQ_XGSRI7vo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-window.ZynCloudDiagnostic = { version: "2.5.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
+window.ZynCloudDiagnostic = { version: "2.4.1", sdk: "2.117.2", url: SUPABASE_URL, keyType: SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ? "publishable" : "unknown" };
 let authSession = null;
 let syncBusy = false;
 let syncTimer = null;
@@ -24,8 +24,11 @@ let cloudMessage = "Entre na sua conta para sincronizar";
 const DB_NAME = "assistente-zyn-db";
 const DB_VERSION = 13;
 let db;
-const VALID_VIEWS = ["home","planning","reminders","goals","wellness","gym","gymWorkout","food","finance","investments","habits","music","assistant"];
-let currentView = (() => { try { const saved=sessionStorage.getItem("zyn-current-view") || localStorage.getItem("zyn-current-view"); return VALID_VIEWS.includes(saved) ? saved : "home"; } catch { return "home"; } })();
+// Restaura a última seção visitada após recarregar o aplicativo.
+const SAVED_VIEW_KEY = "zyn-current-view-v241";
+const SAVED_SCROLL_KEY = "zyn-scroll-y-v241";
+let currentView = localStorage.getItem(SAVED_VIEW_KEY) || "home";
+let restoreScrollAfterRender = true;
 let financeTab = "overview";
 let planningTab = "today";
 let gymTab = "week";
@@ -395,21 +398,60 @@ function bindAuthGate(){
 // MODAIS — controle central de abertura/fechamento de janelas.
 // Cada modal é removido do DOM uma única vez; isso evita travamentos e contagem incorreta.
 let activeModalCount=0;
+
+/**
+ * Fecha um modal de forma segura.
+ * Aceita tanto o elemento .zyn-modal quanto qualquer elemento interno dele.
+ */
 function closeModal(el){
- if(!el || el.dataset.zynClosed==="true") return;
- el.dataset.zynClosed="true";
- if(typeof el._zynKeyHandler==="function"){
-  document.removeEventListener("keydown",el._zynKeyHandler);
-  el._zynKeyHandler=null;
+ const wrapper = el instanceof Element
+  ? (el.matches(".zyn-modal") ? el : el.closest(".zyn-modal"))
+  : null;
+ if(!wrapper || wrapper.dataset.zynClosed==="true") return;
+
+ wrapper.dataset.zynClosed="true";
+ if(typeof wrapper._zynKeyHandler==="function"){
+  document.removeEventListener("keydown",wrapper._zynKeyHandler);
+  wrapper._zynKeyHandler=null;
  }
- el.remove();
- activeModalCount=Math.max(0,activeModalCount-1);
+ wrapper.remove();
+
+ // Recalcula pelo DOM para evitar contadores presos quando um formulário falha.
+ activeModalCount=document.querySelectorAll(".zyn-modal:not([data-zyn-closed='true'])").length;
  document.body.classList.toggle("zyn-modal-open",activeModalCount>0);
+
  if(activeModalCount===0){
-  const last=el._zynPreviousFocus;
-  if(last && typeof last.focus==="function" && document.contains(last)) last.focus();
+  const last=wrapper._zynPreviousFocus;
+  if(last && typeof last.focus==="function" && document.contains(last)){
+   try{last.focus({preventScroll:true});}catch(e){last.focus();}
+  }
  }
 }
+
+// Proteção global para botões comuns de fechar, mesmo se algum formulário
+// esquecer de registrar seu próprio evento.
+document.addEventListener("click",e=>{
+ const button=e.target instanceof Element
+  ? e.target.closest(".zyn-modal [data-modal-close], .zyn-modal [data-close-modal], .zyn-modal .modal-close, .zyn-modal button#close")
+  : null;
+ if(!button)return;
+ const wrapper=button.closest(".zyn-modal");
+ if(wrapper){
+  e.preventDefault();
+  closeModal(wrapper);
+ }
+},true);
+
+// Mantém a posição atual entre recarregamentos da mesma aba.
+window.addEventListener("scroll",()=>{
+ try{sessionStorage.setItem(SAVED_SCROLL_KEY,String(window.scrollY));}catch(e){}
+},{passive:true});
+window.addEventListener("pagehide",()=>{
+ try{
+  localStorage.setItem(SAVED_VIEW_KEY,currentView);
+  sessionStorage.setItem(SAVED_SCROLL_KEY,String(window.scrollY));
+ }catch(e){}
+});
 
 function localDateKey(date=new Date()){const y=date.getFullYear();const m=String(date.getMonth()+1).padStart(2,"0");const d=String(date.getDate()).padStart(2,"0");return `${y}-${m}-${d}`}
 function dateKey(date){return localDateKey(date)}
@@ -462,14 +504,6 @@ function modal(content,options={}){
  requestAnimationFrame(()=>panel?.querySelector("input,select,textarea,button")?.focus());
  return wrapper;
 }
-// Fallback global de fechamento: executa depois do evento próprio do botão.
-document.addEventListener("click",event=>{
- const button=event.target.closest?.(".zyn-modal [data-modal-close], .zyn-modal button#close, .zyn-modal button#confirmClose, .zyn-modal button[aria-label='Fechar'], .zyn-modal [data-close-modal]");
- if(!button)return;
- const wrapper=button.closest(".zyn-modal");
- if(wrapper) closeModal(wrapper);
-});
-
 function confirmZyn(message,title="Confirmar ação"){return new Promise(resolve=>{const el=modal(`<div class="custom-modal-head"><div><span class="eyebrow">ZYN</span><h2>${esc(title)}</h2><p>${esc(message)}</p></div><button class="icon-btn" id="confirmClose" aria-label="Fechar">${uiIcon("close")}</button></div><div class="actions modal-confirm-actions"><button class="btn" id="confirmNo">Cancelar</button><button class="btn danger" id="confirmYes">Confirmar</button></div>`);const finish=v=>{closeModal(el);resolve(v)};el.querySelector("#confirmClose").onclick=()=>finish(false);el.querySelector("#confirmNo").onclick=()=>finish(false);el.querySelector("#confirmYes").onclick=()=>finish(true);});}
 
 function money(value){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(value)||0)}
@@ -513,7 +547,12 @@ function remove(name,id){return new Promise(async(resolve,reject)=>{
   r.onerror=()=>reject(r.error)
 })}
 
-function setView(view){currentView=view;try{sessionStorage.setItem("zyn-current-view",view);localStorage.setItem("zyn-current-view",view);}catch{}render()}
+function setView(view){
+ currentView=view;
+ try{localStorage.setItem(SAVED_VIEW_KEY,currentView);}catch(e){}
+ window.scrollTo(0,0);
+ render();
+}
 
 function store(name,mode="readonly"){return db.transaction(name,mode).objectStore(name)}
 
@@ -1349,16 +1388,22 @@ document.addEventListener("click",e=>{if(!moreMenuOpen)return;if(e.target.closes
 
 /* ===== RENDERIZAÇÃO — escolhe a tela e atualiza o conteúdo principal ===== */
 function render(){
+ // Preserva classes de estado, inclusive zyn-modal-open.
  document.body.classList.remove("light","dark");
  document.body.classList.add(theme);
- document.body.classList.toggle("zyn-modal-open",document.querySelectorAll(".zyn-modal:not([data-zyn-closed='true'])").length>0);
- try{sessionStorage.setItem("zyn-current-view",currentView);localStorage.setItem("zyn-current-view",currentView);}catch{}
+ try{localStorage.setItem(SAVED_VIEW_KEY,currentView);}catch(e){}
  if(!appUnlocked){app.innerHTML=authGateView();bindAuthGate();return;}
  const persistentDock=document.querySelector("#musicDock");
  app.innerHTML=layout();
  if(persistentDock){const freshDock=document.querySelector("#musicDock");if(freshDock)freshDock.replaceWith(persistentDock);}
  bind();
  syncMusicDock();
+ if(restoreScrollAfterRender){
+  restoreScrollAfterRender=false;
+  let savedY=0;
+  try{savedY=Number(sessionStorage.getItem(SAVED_SCROLL_KEY)||0);}catch(e){}
+  requestAnimationFrame(()=>window.scrollTo(0,Number.isFinite(savedY)?savedY:0));
+ }
 }
 window.addEventListener("beforeinstallprompt", e=>{
  e.preventDefault();
@@ -1370,14 +1415,6 @@ window.addEventListener("appinstalled", ()=>{
  const b=document.querySelector("#installBtn"); if(b) b.hidden=true;
  toast("Assistente Zyn instalado");
 });
-// Guarda a seção atual e a posição de rolagem antes de recarregar.
-let zynScrollSaveQueued=false;
-function saveAppPosition(){try{sessionStorage.setItem("zyn-scroll-y",String(Math.max(0,window.scrollY||window.pageYOffset||0)));sessionStorage.setItem("zyn-current-view",currentView);localStorage.setItem("zyn-current-view",currentView);}catch{}}
-window.addEventListener("scroll",()=>{if(zynScrollSaveQueued)return;zynScrollSaveQueued=true;requestAnimationFrame(()=>{zynScrollSaveQueued=false;saveAppPosition();});},{passive:true});
-window.addEventListener("pagehide",saveAppPosition);
-window.addEventListener("beforeunload",saveAppPosition);
-function restoreAppPosition(){let y=0;try{y=Math.max(0,Number(sessionStorage.getItem("zyn-scroll-y")||0));}catch{}requestAnimationFrame(()=>requestAnimationFrame(()=>{window.scrollTo(0,y);setTimeout(()=>window.scrollTo(0,y),250);}));}
-
 (async()=>{
  try{
    await openDB();
@@ -1393,7 +1430,6 @@ function restoreAppPosition(){let y=0;try{y=Math.max(0,Number(sessionStorage.get
      }catch(e){console.warn("[Zyn] Service Worker:",e);}
    }
    render();
-   restoreAppPosition();
    if(deferredInstallPrompt){const b=document.querySelector("#installBtn");if(b)b.hidden=false;}
  }catch(error){
    console.error("[Zyn] Falha na inicialização:",error);
