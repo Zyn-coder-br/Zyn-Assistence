@@ -1,4 +1,4 @@
-# Zyn Assistente — V2.5.1
+# Zyn Assistente — V2.4.1
 
 Base: V2.0.8.
 
@@ -27,7 +27,7 @@ Base: V2.0.8.
 - IndexedDB atualizado para armazenar os novos módulos e sincronizá-los pelo Zyn Cloud.
 
 
-## V2.5.1 — Correção dos modais e estrutura didática
+## V2.4.1 — Correção dos modais e estrutura didática
 - Corrigido um erro crítico: `closeModal()` chamava a si mesma repetidamente, impedindo o fechamento de janelas.
 - Fechamento de modal agora remove a janela corretamente, atualiza o bloqueio de rolagem e limpa o evento de teclado.
 - A tecla Esc fecha somente a janela superior; clicar no fundo fecha a janela quando permitido.
