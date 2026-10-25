@@ -1,13 +1,4 @@
-# Zyn Assistente — V2.5.0
-
-## V2.5.0 — Fechamento resiliente de modais e restauração de posição
-- Adicionado fechamento global de segurança para controles comuns de fechar, sem depender apenas do evento de cada formulário.
-- O fechamento é idempotente: pode ser chamado mais de uma vez sem deixar o modal ou o bloqueio de rolagem presos.
-- A contagem de modais abertos é recalculada pelo DOM real para evitar estado inconsistente.
-- A troca de tema e a renderização deixam de substituir todas as classes do `body`, preservando o estado de modal aberto.
-- A última tela visitada e a posição vertical são salvas e restauradas após recarregar a PWA.
-- Cache e referências dos arquivos atualizados para V2.5.0.
-
+# Zyn Assistente — V2.5.1
 
 Base: V2.0.8.
 
@@ -36,7 +27,7 @@ Base: V2.0.8.
 - IndexedDB atualizado para armazenar os novos módulos e sincronizá-los pelo Zyn Cloud.
 
 
-## V2.4.0 — Correção dos modais e estrutura didática
+## V2.5.1 — Correção dos modais e estrutura didática
 - Corrigido um erro crítico: `closeModal()` chamava a si mesma repetidamente, impedindo o fechamento de janelas.
 - Fechamento de modal agora remove a janela corretamente, atualiza o bloqueio de rolagem e limpa o evento de teclado.
 - A tecla Esc fecha somente a janela superior; clicar no fundo fecha a janela quando permitido.
